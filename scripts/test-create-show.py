@@ -62,8 +62,9 @@ with sync_playwright() as p:
         # Step 3: Click the "Create" button to open create modal
         print(f"\n[Step 3] Opening create show modal...")
 
-        # Find and click the Create button
-        create_btn = page.locator('button:has-text("Create")')
+        # Find and click the Create button with the plus icon (more specific selector)
+        # This targets the button with the SVG plus icon to avoid clicking on calendar cells
+        create_btn = page.locator('button:has(svg[viewBox="0 0 256 256"]):has-text("Create")')
         create_btn.click()
         page.wait_for_timeout(2000)
 
@@ -93,6 +94,7 @@ with sync_playwright() as p:
         print("  ✓ Start time set to 13:00")
 
         # Step 4b: Set the end time to 2pm (14:00 in 24-hour format)
+        # Note: If you add date selection, ensure end date matches start date (shows never span days)
         print(f"\n[Step 4b] Setting end time to 14:00...")
         end_time_input = page.locator('input[aria-labelledby*="endTime"]')
 
