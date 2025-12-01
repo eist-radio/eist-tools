@@ -1,0 +1,156 @@
+name: Schedule éist arís shows
+
+on:
+  schedule:
+    # Run at 11:00 PM UTC every Saturday
+    - cron: '0 23 * * 6'
+
+  # Allow manual triggering for testing
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'Target date (YYYY-MM-DD) - defaults to next Monday'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run mode (only print, do not create shows)'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  schedule-shows:
+    runs-on: ubuntu-latest
+
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
+      RADIOCULT_USER: ${{ secrets.RADIOCULT_USER }}
+      RADIOCULT_PW: ${{ secrets.RADIOCULT_PW }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests python-dotenv playwright
+
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Calculate target date
+        id: date
+        run: |
+          if [ -n "${{ inputs.target_date }}" ]; then
+            TARGET_DATE="${{ inputs.target_date }}"
+          else
+            # Calculate next Monday (2 days from Saturday)
+            TARGET_DATE=$(date -d "next Monday" +%Y-%m-%d)
+          fi
+          echo "target_date=$TARGET_DATE" >> $GITHUB_OUTPUT
+          echo "📅 Target date: $TARGET_DATE"
+
+      - name: Step 1 - Generate schedule.json
+        run: |
+          echo "::group::Generating schedule.json"
+          python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --output-schedule
+          echo "::endgroup::"
+
+      - name: Step 2 - Generate tracks.json
+        run: |
+          echo "::group::Generating tracks.json"
+          python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --output-tracks --weeks-back 3
+          echo "::endgroup::"
+
+      - name: Step 3 - Find empty slots
+        run: |
+          echo "::group::Finding empty slots"
+          python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --test-slots
+          echo "::endgroup::"
+
+      - name: Step 4 - Create show-to-slot mappings
+        run: |
+          echo "::group::Creating show plan"
+          python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --plan
+          echo "::endgroup::"
+
+      - name: Step 5 - Execute plan (create shows)
+        run: |
+          echo "::group::Creating shows via Playwright"
+          # Use --dry-run for scheduled runs, or respect manual input
+          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ inputs.dry_run }}" == "true" ]; then
+            echo "Running in DRY RUN mode - no shows will be created"
+            python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --execute --headless --dry-run
+          else
+            echo "Running in LIVE mode - shows will be created"
+            python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --execute --headless
+          fi
+          echo "::endgroup::"
+
+      - name: Upload artifacts (on success)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: show-plan-success-${{ steps.date.outputs.target_date }}
+          path: |
+            schedule.json
+            tracks.json
+            empty-slots.json
+            updated-slots.json
+          retention-days: 30
+
+      - name: Upload artifacts (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: show-plan-failure-${{ steps.date.outputs.target_date }}
+          path: |
+            schedule.json
+            tracks.json
+            empty-slots.json
+            updated-slots.json
+            error_screenshot_*.png
+          retention-days: 30
+
+      - name: Display summary
+        if: always()
+        run: |
+          echo "## 📊 Show Scheduling Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Week:** ${{ steps.date.outputs.target_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Determine if dry run
+          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ inputs.dry_run }}" == "true" ]; then
+            echo "**Mode:** 🔍 DRY RUN (no changes made)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** ✨ LIVE (shows created)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f updated-slots.json ]; then
+            SHOW_COUNT=$(python -c "import json; print(len(json.load(open('updated-slots.json'))))" 2>/dev/null || echo "0")
+            echo "**Shows Planned:** $SHOW_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [ "${{ job.status }}" == "success" ]; then
+              if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ inputs.dry_run }}" == "true" ]; then
+                echo "✅ **Status:** Dry run completed successfully - $SHOW_COUNT shows would be created" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "✅ **Status:** All shows created successfully" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "❌ **Status:** Failed - check logs and error screenshots" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ **No shows planned** - schedule may be full or no eligible shows found" >> $GITHUB_STEP_SUMMARY
+          fi

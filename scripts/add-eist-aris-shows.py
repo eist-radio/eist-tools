@@ -933,28 +933,19 @@ def mode_plan(scheduler: EistArisScheduler, args):
     print(f"Loaded {len(eligible_shows)} shows from {tracks_file}")
 
     schedule_file = "schedule.json"
-    already_scheduled_titles = set()
+    already_scheduled_track_ids = set()
 
     if os.path.exists(schedule_file):
         with open(schedule_file, "r", encoding="utf-8") as f:
             current_schedule = json.load(f)
 
         for show in current_schedule:
-            title = (show.get("title") or "").strip()
-            if title and scheduler.has_eist_aris_suffix(title):
-                original = scheduler.eist_aris_pattern.sub("", title).strip()
-                if original:
-                    already_scheduled_titles.add(original)
+            track_id = show.get("track_id")
+            if track_id:
+                already_scheduled_track_ids.add(track_id)
 
         print(f"Loaded {len(current_schedule)} shows from {schedule_file}")
-        print(f"Found {len(already_scheduled_titles)} already scheduled (éist arís)")
-        if already_scheduled_titles:
-            sample = sorted(already_scheduled_titles)[:5]
-            extra = len(already_scheduled_titles) - len(sample)
-            msg = ", ".join(sample)
-            if extra > 0:
-                msg += f" and {extra} more..."
-            print(f"  Already scheduled: {msg}")
+        print(f"Found {len(already_scheduled_track_ids)} shows with track IDs in current week")
     else:
         print(f"Warning: {schedule_file} not found - cannot check for duplicates")
         print("  All shows in tracks.json will be considered")
@@ -963,7 +954,7 @@ def mode_plan(scheduler: EistArisScheduler, args):
     eligible_shows = [
         show
         for show in eligible_shows
-        if show.get("title", "").strip() not in already_scheduled_titles
+        if show.get("track_id") not in already_scheduled_track_ids
     ]
     filtered_count = original_count - len(eligible_shows)
 
@@ -1070,6 +1061,8 @@ def mode_execute(
     args,
     login_username: Optional[str],
     login_password: Optional[str],
+    headless: bool = False,
+    dry_run: bool = False,
 ):
     print("\n" + "=" * 80)
     print("MODE: Executing plan from updated-slots.json")
@@ -1089,8 +1082,42 @@ def mode_execute(
         print("No mappings to execute\n")
         return
 
+    if dry_run:
+        print("=" * 80)
+        print("DRY RUN MODE - No shows will be created")
+        print("=" * 80 + "\n")
+
+        for i, mapping in enumerate(mappings, 1):
+            slot = mapping["slot"]
+            show = mapping["show"]
+
+            print(f"\n[{i}/{len(mappings)}] Would create show:")
+            print("-" * 60)
+            print(f"  Title: {show['title']} (éist arís)")
+            print(f"  Date: {slot['day_of_week']}, {slot['date']}")
+            print(f"  Time: {slot['start']} - {slot['end']}")
+            print(f"  Duration: {slot['scheduled_duration']} minutes")
+            print(f"  Track ID: {show.get('track_id', 'N/A')}")
+            print(f"  Track Title: {show.get('track_title', 'N/A')}")
+            print(f"  Artist: {show.get('artist_name', 'N/A')}")
+
+            description = show.get('description', '')
+            if isinstance(description, dict):
+                desc_text = "Éist arís replay show."
+            elif description:
+                desc_text = description[:100] + "..." if len(description) > 100 else description
+            else:
+                desc_text = "Éist arís replay show."
+            print(f"  Description: {desc_text}")
+            print("-" * 60)
+
+        print("\n" + "=" * 80)
+        print(f"DRY RUN COMPLETE - {len(mappings)} shows would be created")
+        print("=" * 80 + "\n")
+        return
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=headless)
         context = browser.new_context()
         page = context.new_page()
 
@@ -1211,6 +1238,16 @@ def main() -> None:
         action="store_true",
         help="Execute mappings in updated-slots.json and create shows",
     )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run browser in headless mode (for CI environments)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be done without making any changes",
+    )
 
     args = parser.parse_args()
 
@@ -1234,7 +1271,9 @@ def main() -> None:
         return
 
     if args.execute:
-        mode_execute(scheduler, args, login_username, login_password)
+        mode_execute(
+            scheduler, args, login_username, login_password, args.headless, args.dry_run
+        )
         return
 
     print(
