@@ -1,6 +1,6 @@
-# Éist Radio tools
+# éist radio tools
 
-Automation tools for Éist Radio on Radiocult: replay show scheduling and media archival.
+Automation tools for éist radio on radiocult: replay show scheduling and media archival.
 
 See [flow.md](flow.md) for details.
 
@@ -45,13 +45,13 @@ Create a `.env` file with your credentials:
 
 ```env
 API_KEY=your_api_key_here
-RADIOCULT_USER=your_email@example.com
-RADIOCULT_PW=your_password
+radioCULT_USER=your_email@example.com
+radioCULT_PW=your_password
 ```
 
 For local development, you can get the API key from:
 https://api.radiocult.fm/api/station/eist-radio/media/track
-(Log in to RadioCult in the browser first)
+(Log in to radioCult in the browser first)
 
 ## Usage
 
@@ -100,7 +100,7 @@ python scripts/add-eist-aris-shows.py "2025-12-08" --execute
 
 ## Media Archive Manager
 
-Archives old Radiocult media (tracks and recordings) to Google Drive and cleans up storage.
+Archives old radiocult media (tracks and recordings) to Google Drive and cleans up storage.
 
 ### Prerequisites
 
@@ -115,10 +115,10 @@ In addition to the standard setup above, the archive manager requires:
 # Scan: list all tracks and recordings older than 8 weeks
 python scripts/eist-archive-manager.py --scan
 
-# Archive: download old media, upload to Google Drive, tag in Radiocult
+# Archive: download old media, upload to Google Drive, tag in radiocult
 python scripts/eist-archive-manager.py --archive
 
-# Cleanup: delete archived media from Radiocult (verifies Drive upload + checks future schedule first)
+# Cleanup: delete archived media from radiocult (verifies Drive upload + checks future schedule first)
 python scripts/eist-archive-manager.py --cleanup
 
 # Full pipeline
@@ -157,7 +157,7 @@ The `.github/workflows/schedule-repeat-shows.yml` workflow runs automatically:
 
 You can trigger the workflow manually:
 
-1. Go to Actions → Schedule Éist Arís Shows
+1. Go to Actions → Schedule éist Arís Shows
 2. Click "Run workflow"
 3. Options:
    - **Target date**: Custom date (optional, defaults to next Monday)
