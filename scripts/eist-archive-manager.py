@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -131,11 +132,14 @@ class RadiocultClient:
         resp.raise_for_status()
         return resp.json().get("url", "")
 
-    def download_media(self, media_id: str, dest_path: str, media_type: str = "track") -> None:
+    def download_media(
+        self, media_id: str, dest_path: str, media_type: str = "track",
+        expected_size: int = 0,
+    ) -> None:
         url = self.get_download_url(media_id, media_type)
         if not url:
             raise RuntimeError(f"No download URL returned for {media_type} {media_id}")
-        resp = requests.get(url, stream=True, timeout=30)
+        resp = requests.get(url, stream=True, timeout=(15, 300))
         resp.raise_for_status()
         total = int(resp.headers.get("Content-Length", 0))
         downloaded = 0
@@ -147,6 +151,13 @@ class RadiocultClient:
                     pct = downloaded * 100 // total
                     print(f"\r  Downloading: {pct}% ({downloaded // 1024 // 1024}MB)", end="", flush=True)
         print()
+        actual_size = os.path.getsize(dest_path)
+        if expected_size and abs(actual_size - expected_size) > 1024:
+            os.remove(dest_path)
+            raise RuntimeError(
+                f"Download size mismatch: expected {expected_size} bytes, "
+                f"got {actual_size} bytes"
+            )
 
     def list_tags(self) -> List[Dict]:
         resp = self.session.get(f"{API_BASE_URL}/{STATION_ID}/media/tag")
@@ -173,9 +184,9 @@ class RadiocultClient:
             raise RuntimeError(f"Could not create tag '{name}': {data}")
         return tag_id
 
-    def tag_track(self, track_id: str, tag_id: str) -> None:
+    def tag_media(self, media_id: str, tag_id: str, media_type: str = "track") -> None:
         resp = self.session.put(
-            f"{API_BASE_URL}/{STATION_ID}/media/track/{track_id}/tag/{tag_id}"
+            f"{API_BASE_URL}/{STATION_ID}/media/{media_type}/{media_id}/tag/{tag_id}"
         )
         resp.raise_for_status()
 
@@ -230,8 +241,17 @@ class RadiocultClient:
                         confirm = page.get_by_text("Confirm")
                         if confirm.is_visible():
                             confirm.click()
-                        page.wait_for_timeout(1_000)
+                        page.wait_for_timeout(2_000)
 
+                        # Verify the row is gone
+                        still_visible = page.locator(f'tr:has-text("{title}")').first
+                        try:
+                            if still_visible.is_visible(timeout=1_000):
+                                print(f"    WARNING: track still visible after delete, not marking as deleted")
+                                checkbox.click()  # uncheck
+                                continue
+                        except Exception:
+                            pass
                         deleted.append(track_id)
                         print(f"    Deleted")
                     except Exception as exc:
@@ -260,12 +280,16 @@ class GoogleDriveClient:
     DRIVE_API = "https://www.googleapis.com/drive/v3/files"
     UPLOAD_API = "https://www.googleapis.com/upload/drive/v3/files"
 
+    TOKEN_REFRESH_INTERVAL = 45 * 60  # refresh after 45 min (tokens last ~60 min)
+
     def __init__(self) -> None:
         self.token: Optional[str] = None
+        self._token_acquired_at: float = 0
 
     def get_token(self) -> str:
-        if self.token:
+        if self.token and (time.time() - self._token_acquired_at) < self.TOKEN_REFRESH_INTERVAL:
             return self.token
+        self.token = None
         result = subprocess.run(
             ["gcloud", "auth", "print-access-token"],
             capture_output=True,
@@ -273,6 +297,7 @@ class GoogleDriveClient:
         )
         if result.returncode == 0 and result.stdout.strip():
             self.token = result.stdout.strip()
+            self._token_acquired_at = time.time()
             return self.token
 
         print("No active gcloud credentials. Authenticating...")
@@ -355,9 +380,35 @@ class GoogleDriveClient:
         month_id = self.find_or_create_folder(month_folder, parent_id=year_id)
         return month_id
 
+    def find_existing_file(self, filename: str, folder_id: str) -> Optional[str]:
+        query = (
+            f"name='{filename}' and '{folder_id}' in parents and trashed=false"
+        )
+        resp = requests.get(
+            self.DRIVE_API,
+            headers=self._headers(),
+            params={"q": query, "fields": "files(id,name,size)", "spaces": "drive"},
+        )
+        if self._refresh_token_if_needed(resp):
+            resp = requests.get(
+                self.DRIVE_API,
+                headers=self._headers(),
+                params={"q": query, "fields": "files(id,name,size)", "spaces": "drive"},
+            )
+        if resp.status_code == 200:
+            files = resp.json().get("files", [])
+            if files:
+                return files[0]["id"]
+        return None
+
     def upload_file(self, file_path: str, folder_id: str) -> str:
         filename = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
+
+        existing_id = self.find_existing_file(filename, folder_id)
+        if existing_id:
+            print(f"  File already exists in Drive ({existing_id}), skipping upload")
+            return existing_id
 
         metadata = json.dumps(
             {"name": filename, "parents": [folder_id]}
@@ -415,13 +466,25 @@ class GoogleDriveClient:
 
         raise RuntimeError(f"Upload did not complete for {filename}")
 
-    def verify_file(self, file_id: str) -> bool:
+    def verify_file(self, file_id: str, expected_size: int = 0) -> bool:
         resp = requests.get(
             f"{self.DRIVE_API}/{file_id}",
             headers=self._headers(),
             params={"fields": "id,name,size"},
         )
-        return resp.status_code == 200
+        if self._refresh_token_if_needed(resp):
+            resp = requests.get(
+                f"{self.DRIVE_API}/{file_id}",
+                headers=self._headers(),
+                params={"fields": "id,name,size"},
+            )
+        if resp.status_code != 200:
+            return False
+        if expected_size:
+            drive_size = int(resp.json().get("size", 0))
+            if abs(drive_size - expected_size) > 1024:
+                return False
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -566,20 +629,21 @@ def mode_archive(
 
         local_path = os.path.join(output_dir, filename)
 
+        expected_size = item.get("fileSize", 0)
+
         try:
             print(f"  Downloading to {local_path}...")
-            rc.download_media(item_id, local_path, media_type)
+            rc.download_media(item_id, local_path, media_type, expected_size=expected_size)
 
             folder_id = drive.ensure_folder_path(drive_folder, year, month_folder)
             drive_file_id = drive.upload_file(local_path, folder_id)
 
-            if not drive.verify_file(drive_file_id):
-                print(f"  WARNING: Could not verify upload, skipping tag", file=sys.stderr)
+            if not drive.verify_file(drive_file_id, expected_size=expected_size):
+                print(f"  WARNING: Could not verify upload (size mismatch or missing), skipping", file=sys.stderr)
                 continue
 
-            if media_type == "track":
-                rc.tag_track(item_id, archive_tag_id)
-                print(f"  Tagged as ready_to_archive")
+            rc.tag_media(item_id, archive_tag_id, media_type)
+            print(f"  Tagged as ready_to_archive")
 
             state.mark(
                 item_id,
@@ -667,9 +731,10 @@ def mode_cleanup(
 
     # Tag as ready_to_delete
     delete_tag_id = rc.find_or_create_tag("ready_to_delete")
-    for tid in verified:
+    for tid, entry in verified.items():
         try:
-            rc.tag_track(tid, delete_tag_id)
+            mtype = entry.get("media_type", "track")
+            rc.tag_media(tid, delete_tag_id, mtype)
         except Exception as exc:
             print(f"  Warning: could not tag {tid}: {exc}", file=sys.stderr)
 
