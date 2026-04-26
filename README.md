@@ -10,7 +10,33 @@ See [flow.md](flow.md) for details.
 
 ```bash
 pip install -r requirements.txt
+```
+
+This installs `requests`, `python-dotenv`, and `playwright`. After installing the Python packages, install the Playwright browser binaries and their OS-level dependencies:
+
+**Fedora:**
+
+```bash
+# Install system dependencies (Playwright's install-deps requires apt-get)
+sudo dnf install -y alsa-lib atk at-spi2-atk cups-libs libdrm mesa-libgbm nspr nss pango libXcomposite libXdamage libXrandr libXtst
+```
+
+**Debian/Ubuntu:**
+
+```bash
+playwright install-deps
+```
+
+Then install the browser binaries:
+
+```bash
 playwright install chromium
+```
+
+Or to install all supported browsers:
+
+```bash
+playwright install
 ```
 
 ### Environment Variables
