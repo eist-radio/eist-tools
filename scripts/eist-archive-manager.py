@@ -253,9 +253,8 @@ class RadiocultClient:
                         delete_btn.click()
                         page.wait_for_timeout(500)
 
-                        confirm = page.get_by_text("Confirm")
-                        if confirm.is_visible():
-                            confirm.click()
+                        confirm = page.get_by_role("button", name="Delete media")
+                        confirm.click(timeout=5_000)
                         page.wait_for_timeout(2_000)
 
                         # Verify the row is gone
