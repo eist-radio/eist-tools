@@ -242,7 +242,7 @@ class RadiocultClient:
                         checkbox.click()
                         page.wait_for_timeout(500)
 
-                        delete_btn = page.get_by_text("Delete")
+                        delete_btn = page.get_by_role("button", name="Delete").first
                         if not delete_btn.is_visible():
                             for label in ("Actions", "Bulk actions", "More"):
                                 trigger = page.get_by_text(label)
