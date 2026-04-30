@@ -213,14 +213,23 @@ class RadiocultClient:
                 page.get_by_role("link", name="Media").click()
                 page.wait_for_load_state("networkidle", timeout=15_000)
 
+                search_box = page.locator('input[type="search"], input[placeholder*="earch"]').first
+
                 for track_id in track_ids:
                     track = tracks_by_id.get(track_id, {})
                     title = track.get("title", track_id)
                     print(f"  Deleting: {title} ({track_id})")
 
                     try:
+                        # Search for the track to make it visible in the table
+                        search_box.click()
+                        search_box.fill("")
+                        search_box.fill(title[:40])
+                        page.wait_for_load_state("networkidle", timeout=10_000)
+                        page.wait_for_timeout(1_000)
+
                         row = page.locator(f'tr:has-text("{title}")').first
-                        if not row.is_visible(timeout=3_000):
+                        if not row.is_visible(timeout=5_000):
                             print(f"    Track not visible in table, skipping")
                             continue
                         checkbox = row.locator('input[type="checkbox"]').first
@@ -256,6 +265,14 @@ class RadiocultClient:
                         print(f"    Deleted")
                     except Exception as exc:
                         print(f"    Failed to delete: {exc}", file=sys.stderr)
+                    finally:
+                        # Clear the search for the next iteration
+                        try:
+                            search_box.click()
+                            search_box.fill("")
+                            page.wait_for_timeout(500)
+                        except Exception:
+                            pass
 
             except Exception as exc:
                 screenshot_path = "cleanup-error.png"
