@@ -5,7 +5,7 @@ Archive old Radiocult media (tracks + recordings) to Google Drive and clean up.
 Modes:
 - --scan       → list media older than N weeks, save to archive-scan.json
 - --archive    → download old media, upload to Google Drive, tag in Radiocult
-- --cleanup    → delete archived media from Radiocult via Playwright
+- --cleanup    → tag archived media as ready_to_delete (manual deletion in Radiocult UI)
 """
 
 import argparse
@@ -189,117 +189,6 @@ class RadiocultClient:
             f"{API_BASE_URL}/{STATION_ID}/media/{media_type}/{media_id}/tag/{tag_id}"
         )
         resp.raise_for_status()
-
-    def delete_tracks_ui(
-        self, track_ids: List[str], tracks_by_id: Dict[str, Dict], headless: bool = True
-    ) -> List[str]:
-        """Delete tracks via Playwright UI. Returns list of successfully deleted IDs."""
-        deleted = []
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=headless)
-            context = browser.new_context(viewport={"width": 1920, "height": 1080})
-            page = context.new_page()
-
-            try:
-                page.goto(f"{WEB_BASE_URL}/login")
-                page.wait_for_selector('input[type="email"]', timeout=10_000)
-                page.fill('input[type="email"]', self.username)
-                page.fill('input[type="password"]', self.password)
-                page.click('button[type="submit"]')
-                page.wait_for_selector(
-                    'input[type="email"]', state="hidden", timeout=30_000
-                )
-
-                page.get_by_role("link", name="Media").click()
-                page.wait_for_load_state("networkidle", timeout=15_000)
-                # Wait for the media table to render
-                page.wait_for_selector("tr", timeout=15_000)
-
-                search_box = page.locator('input[data-ds--text-field--input="true"]')
-                if not search_box.is_visible(timeout=5_000):
-                    search_box = page.get_by_placeholder("Search", exact=False)
-                search_box.wait_for(state="visible", timeout=10_000)
-                print("  Media library loaded, search box found")
-
-                for track_id in track_ids:
-                    track = tracks_by_id.get(track_id, {})
-                    title = track.get("title", track_id)
-                    print(f"  Deleting: {title} ({track_id})")
-
-                    try:
-                        # Search for the track to make it visible in the table
-                        search_box.click()
-                        search_box.fill("")
-                        page.wait_for_timeout(300)
-                        search_box.press_sequentially(title[:40], delay=50)
-                        page.wait_for_timeout(2_000)
-
-                        row = page.locator(f'tr:has-text("{title}")').first
-                        if not row.is_visible(timeout=5_000):
-                            print(f"    Track not visible in table, skipping")
-                            continue
-                        checkbox = row.locator('input[type="checkbox"]').first
-                        checkbox.click()
-                        page.wait_for_timeout(500)
-
-                        delete_btn = page.get_by_role("button", name="Delete").first
-                        if not delete_btn.is_visible():
-                            for label in ("Actions", "Bulk actions", "More"):
-                                trigger = page.get_by_text(label)
-                                if trigger.is_visible():
-                                    trigger.click()
-                                    page.wait_for_timeout(500)
-                                    break
-                        delete_btn.click()
-                        page.wait_for_timeout(500)
-
-                        confirm = page.get_by_role("button", name="Delete media")
-                        confirm.click(timeout=5_000)
-                        page.wait_for_timeout(2_000)
-
-                        # Verify the row is gone
-                        still_visible = page.locator(f'tr:has-text("{title}")').first
-                        try:
-                            if still_visible.is_visible(timeout=1_000):
-                                print(f"    WARNING: track still visible after delete, not marking as deleted")
-                                checkbox.click()  # uncheck
-                                continue
-                        except Exception:
-                            pass
-                        deleted.append(track_id)
-                        print(f"    Deleted")
-                    except Exception as exc:
-                        try:
-                            page.screenshot(path=f"cleanup-error-{track_id}.png")
-                        except Exception:
-                            pass
-                        print(f"    Failed to delete: {exc}", file=sys.stderr)
-                    finally:
-                        # Clear the search for the next iteration
-                        try:
-                            clear_btn = page.locator('span[aria-label="Clear search"]')
-                            if clear_btn.is_visible(timeout=1_000):
-                                clear_btn.click()
-                                page.wait_for_timeout(1_000)
-                        except Exception:
-                            try:
-                                search_box.fill("")
-                                page.wait_for_timeout(500)
-                            except Exception:
-                                pass
-
-            except Exception as exc:
-                screenshot_path = "cleanup-error.png"
-                try:
-                    page.screenshot(path=screenshot_path)
-                    print(f"Screenshot saved to {screenshot_path}", file=sys.stderr)
-                except Exception:
-                    pass
-                print(f"Cleanup error: {exc}", file=sys.stderr)
-            finally:
-                browser.close()
-
-        return deleted
 
 
 # ---------------------------------------------------------------------------
@@ -542,11 +431,7 @@ class ArchiveStateManager:
         entry = self.state.get(track_id)
         return entry is not None and entry.get("status") in ("archived", "deleted")
 
-    def is_deleted(self, track_id: str) -> bool:
-        entry = self.state.get(track_id)
-        return entry is not None and entry.get("status") == "deleted"
-
-    def mark(self, track_id: str, status: str, **metadata) -> None:
+def mark(self, track_id: str, status: str, **metadata) -> None:
         if track_id not in self.state:
             self.state[track_id] = {}
         self.state[track_id]["status"] = status
@@ -704,7 +589,6 @@ def mode_cleanup(
     drive: GoogleDriveClient,
     state: ArchiveStateManager,
     dry_run: bool,
-    headless: bool,
 ) -> None:
     to_delete = {
         tid: entry
@@ -755,37 +639,26 @@ def mode_cleanup(
         return
 
     if dry_run:
-        print(f"\n[DRY RUN] Would delete {len(verified)} items from Radiocult:")
+        print(f"\n[DRY RUN] Would tag {len(verified)} items as ready_to_delete:")
         for tid, entry in verified.items():
             print(f"  {entry.get('title', tid)}")
         return
 
-    # Tag as ready_to_delete
+    # Tag as ready_to_delete so they can be filtered and deleted in the Radiocult UI
     delete_tag_id = rc.find_or_create_tag("ready_to_delete")
+    tagged = 0
     for tid, entry in verified.items():
+        title = entry.get("title", tid)
         try:
             mtype = entry.get("media_type", "track")
             rc.tag_media(tid, delete_tag_id, mtype)
+            tagged += 1
+            print(f"  Tagged: {title}")
         except Exception as exc:
-            print(f"  Warning: could not tag {tid}: {exc}", file=sys.stderr)
+            print(f"  Warning: could not tag {title}: {exc}", file=sys.stderr)
 
-    # Build lookup for Playwright deletion
-    tracks_by_id = {tid: entry for tid, entry in verified.items()}
-
-    # Delete via Playwright
-    print(f"\nDeleting {len(verified)} tracks via browser...")
-    deleted_ids = rc.delete_tracks_ui(
-        list(verified.keys()), tracks_by_id, headless=headless
-    )
-
-    for tid in deleted_ids:
-        state.mark(
-            tid,
-            "deleted",
-            deleted_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-    print(f"\nDeleted {len(deleted_ids)}/{len(verified)} tracks")
+    print(f"\nTagged {tagged}/{len(verified)} tracks as ready_to_delete")
+    print("Delete them manually in the Radiocult Media library using the Tag filter.")
 
 
 # ---------------------------------------------------------------------------
@@ -801,7 +674,7 @@ def main():
     )
     parser.add_argument("--scan", action="store_true", help="List tracks and recordings older than --weeks")
     parser.add_argument("--archive", action="store_true", help="Download + upload to Drive")
-    parser.add_argument("--cleanup", action="store_true", help="Delete archived media from Radiocult")
+    parser.add_argument("--cleanup", action="store_true", help="Tag archived media as ready_to_delete for manual removal")
     parser.add_argument("--weeks", type=int, default=8, help="Age threshold in weeks (default: 8)")
     parser.add_argument("--output", default="./archive-tmp", help="Temp download directory")
     parser.add_argument("--drive-folder", default="éist - archive", help="Root Google Drive folder name")
@@ -841,7 +714,7 @@ def main():
     if args.cleanup:
         rc.authenticate(headless=headless)
         drive = GoogleDriveClient()
-        mode_cleanup(rc, drive, state, args.dry_run, headless)
+        mode_cleanup(rc, drive, state, args.dry_run)
 
 
 if __name__ == "__main__":
