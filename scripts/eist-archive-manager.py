@@ -212,9 +212,13 @@ class RadiocultClient:
 
                 page.get_by_role("link", name="Media").click()
                 page.wait_for_load_state("networkidle", timeout=15_000)
+                # Wait for the media table to render
+                page.wait_for_selector("tr", timeout=15_000)
 
-                search_box = page.get_by_placeholder("Search title, artist or album")
-                search_box.wait_for(state="visible", timeout=15_000)
+                search_box = page.locator('input[data-ds--text-field--input="true"]')
+                if not search_box.is_visible(timeout=5_000):
+                    search_box = page.get_by_placeholder("Search", exact=False)
+                search_box.wait_for(state="visible", timeout=10_000)
                 print("  Media library loaded, search box found")
 
                 for track_id in track_ids:
