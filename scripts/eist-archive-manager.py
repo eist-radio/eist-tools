@@ -213,7 +213,9 @@ class RadiocultClient:
                 page.get_by_role("link", name="Media").click()
                 page.wait_for_load_state("networkidle", timeout=15_000)
 
-                search_box = page.locator('input[placeholder="Search title, artist or album"]')
+                search_box = page.get_by_placeholder("Search title, artist or album")
+                search_box.wait_for(state="visible", timeout=15_000)
+                print("  Media library loaded, search box found")
 
                 for track_id in track_ids:
                     track = tracks_by_id.get(track_id, {})
@@ -264,6 +266,10 @@ class RadiocultClient:
                         deleted.append(track_id)
                         print(f"    Deleted")
                     except Exception as exc:
+                        try:
+                            page.screenshot(path=f"cleanup-error-{track_id}.png")
+                        except Exception:
+                            pass
                         print(f"    Failed to delete: {exc}", file=sys.stderr)
                     finally:
                         # Clear the search for the next iteration
