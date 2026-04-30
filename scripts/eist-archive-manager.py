@@ -213,7 +213,7 @@ class RadiocultClient:
                 page.get_by_role("link", name="Media").click()
                 page.wait_for_load_state("networkidle", timeout=15_000)
 
-                search_box = page.locator('input[type="search"], input[placeholder*="earch"]').first
+                search_box = page.locator('input[placeholder="Search title, artist or album"]')
 
                 for track_id in track_ids:
                     track = tracks_by_id.get(track_id, {})
@@ -224,9 +224,9 @@ class RadiocultClient:
                         # Search for the track to make it visible in the table
                         search_box.click()
                         search_box.fill("")
-                        search_box.fill(title[:40])
-                        page.wait_for_load_state("networkidle", timeout=10_000)
-                        page.wait_for_timeout(1_000)
+                        page.wait_for_timeout(300)
+                        search_box.press_sequentially(title[:40], delay=50)
+                        page.wait_for_timeout(2_000)
 
                         row = page.locator(f'tr:has-text("{title}")').first
                         if not row.is_visible(timeout=5_000):
@@ -268,11 +268,16 @@ class RadiocultClient:
                     finally:
                         # Clear the search for the next iteration
                         try:
-                            search_box.click()
-                            search_box.fill("")
-                            page.wait_for_timeout(500)
+                            clear_btn = page.locator('span[aria-label="Clear search"]')
+                            if clear_btn.is_visible(timeout=1_000):
+                                clear_btn.click()
+                                page.wait_for_timeout(1_000)
                         except Exception:
-                            pass
+                            try:
+                                search_box.fill("")
+                                page.wait_for_timeout(500)
+                            except Exception:
+                                pass
 
             except Exception as exc:
                 screenshot_path = "cleanup-error.png"
