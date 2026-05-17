@@ -431,12 +431,12 @@ class ArchiveStateManager:
         entry = self.state.get(track_id)
         return entry is not None and entry.get("status") in ("archived", "deleted")
 
-def mark(self, track_id: str, status: str, **metadata) -> None:
-        if track_id not in self.state:
-            self.state[track_id] = {}
-        self.state[track_id]["status"] = status
-        self.state[track_id].update(metadata)
-        self.save()
+    def mark(self, track_id: str, status: str, **metadata) -> None:
+            if track_id not in self.state:
+                self.state[track_id] = {}
+            self.state[track_id]["status"] = status
+            self.state[track_id].update(metadata)
+            self.save()
 
 
 # ---------------------------------------------------------------------------
