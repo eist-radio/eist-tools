@@ -112,6 +112,9 @@ In addition to the standard setup above, the archive manager requires:
 ### Modes
 
 ```bash
+# Full run (default): delete state files, then scan → archive → cleanup from scratch
+python scripts/eist-archive-manager.py
+
 # Scan: list all tracks and recordings older than 8 weeks
 python scripts/eist-archive-manager.py --scan
 
@@ -121,7 +124,7 @@ python scripts/eist-archive-manager.py --archive
 # Cleanup: delete archived media from radiocult (verifies Drive upload + checks future schedule first)
 python scripts/eist-archive-manager.py --cleanup
 
-# Full pipeline
+# Selective pipeline (preserves existing state files)
 python scripts/eist-archive-manager.py --archive --cleanup
 
 # Preview any mode without making changes

@@ -2,7 +2,11 @@
 """
 Archive old Radiocult media (tracks + recordings) to Google Drive and clean up.
 
+When run with no arguments, performs a full scan → archive → cleanup from fresh
+state (removes archive-scan.json and archive-state.json first).
+
 Modes:
+- (no flags)   → full run: delete state files, then scan → archive → cleanup
 - --scan       → list media older than N weeks, save to archive-scan.json
 - --archive    → download old media, upload to Google Drive, tag in Radiocult
 - --cleanup    → tag archived media as ready_to_delete (manual deletion in Radiocult UI)
@@ -720,7 +724,8 @@ def main():
     load_dotenv()
 
     parser = argparse.ArgumentParser(
-        description="Archive old Radiocult media to Google Drive.",
+        description="Archive old Radiocult media to Google Drive. "
+        "With no flags, runs a full scan → archive → cleanup from fresh state.",
     )
     parser.add_argument("--scan", action="store_true", help="List tracks and recordings older than --weeks")
     parser.add_argument("--archive", action="store_true", help="Download + upload to Drive")
@@ -732,9 +737,16 @@ def main():
     parser.add_argument("--interactive", action="store_true", help="Show browser window")
     args = parser.parse_args()
 
-    if not (args.scan or args.archive or args.cleanup):
-        parser.print_help()
-        sys.exit(1)
+    run_all = not (args.scan or args.archive or args.cleanup)
+    if run_all:
+        args.scan = True
+        args.archive = True
+        args.cleanup = True
+        for stale in ("archive-scan.json", "archive-state.json"):
+            if os.path.exists(stale):
+                os.remove(stale)
+                print(f"Removed stale state file: {stale}")
+        print("No mode specified — running full scan → archive → cleanup from fresh state\n")
 
     api_key = os.getenv("API_KEY")
     username = os.getenv("RADIOCULT_USER")
