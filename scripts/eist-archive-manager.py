@@ -532,6 +532,7 @@ def mode_archive(
     print(f"Tag 'ready_to_archive' ID: {archive_tag_id}")
 
     archived_count = 0
+    failed_ids: set = set()
     for i, item in enumerate(to_archive, 1):
         item_id = item["id"]
         media_type = item.get("_media_type", "track")
@@ -575,11 +576,26 @@ def mode_archive(
             os.remove(local_path)
             archived_count += 1
 
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                print(f"  Gone from Radiocult (404), removing from scan", file=sys.stderr)
+                failed_ids.add(item_id)
+            else:
+                print(f"  ERROR: {exc}", file=sys.stderr)
+            if os.path.exists(local_path):
+                os.remove(local_path)
+            continue
         except Exception as exc:
             print(f"  ERROR: {exc}", file=sys.stderr)
             if os.path.exists(local_path):
                 os.remove(local_path)
             continue
+
+    if failed_ids:
+        old_media = [t for t in old_media if t["id"] not in failed_ids]
+        with open(scan_path, "w", encoding="utf-8") as f:
+            json.dump(old_media, f, indent=2, ensure_ascii=False)
+        print(f"Pruned {len(failed_ids)} dead tracks from {scan_path}")
 
     print(f"\nArchived {archived_count}/{len(to_archive)} items")
 
@@ -589,6 +605,8 @@ def mode_cleanup(
     drive: GoogleDriveClient,
     state: ArchiveStateManager,
     dry_run: bool,
+    output_dir: str = "./archive-tmp",
+    drive_folder: str = "éist - archive",
 ) -> None:
     to_delete = {
         tid: entry
@@ -620,19 +638,38 @@ def mode_cleanup(
 
     print(f"\n{len(to_delete)} items safe to delete\n")
 
-    # Verify each file still exists in Drive
+    # Verify each file still exists in Drive; re-upload if missing
     verified = {}
+    os.makedirs(output_dir, exist_ok=True)
     for tid, entry in to_delete.items():
         drive_file_id = entry.get("drive_file_id")
         title = entry.get("title", tid)
-        if not drive_file_id:
-            print(f"  {title}: no Drive file ID, skipping")
-            continue
-        if drive.verify_file(drive_file_id):
+        if not drive_file_id or not drive.verify_file(drive_file_id):
+            print(f"  {title}: NOT found in Drive, re-archiving...")
+            media_type = entry.get("media_type", "track")
+            filename = entry.get("filename") or f"{tid}.mp3"
+            created = entry.get("created", "")
+            local_path = os.path.join(output_dir, filename)
+            try:
+                rc.download_media(tid, local_path, media_type)
+                year, month_folder = folder_for_date(created)
+                folder_id = drive.ensure_folder_path(drive_folder, year, month_folder)
+                new_file_id = drive.upload_file(local_path, folder_id)
+                if drive.verify_file(new_file_id):
+                    entry["drive_file_id"] = new_file_id
+                    state.mark(tid, "archived", **{k: v for k, v in entry.items() if k != "status"})
+                    verified[tid] = entry
+                    print(f"  {title}: re-uploaded and verified in Drive")
+                else:
+                    print(f"  {title}: re-upload failed verification, skipping", file=sys.stderr)
+            except Exception as exc:
+                print(f"  {title}: re-archive failed: {exc}", file=sys.stderr)
+            finally:
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+        else:
             verified[tid] = entry
             print(f"  {title}: verified in Drive")
-        else:
-            print(f"  {title}: NOT found in Drive, skipping", file=sys.stderr)
 
     if not verified:
         print("No tracks verified in Drive. Aborting cleanup.")
@@ -653,12 +690,25 @@ def mode_cleanup(
             mtype = entry.get("media_type", "track")
             rc.tag_media(tid, delete_tag_id, mtype)
             tagged += 1
+            state.mark(tid, "deleted")
             print(f"  Tagged: {title}")
         except Exception as exc:
             print(f"  Warning: could not tag {title}: {exc}", file=sys.stderr)
 
     print(f"\nTagged {tagged}/{len(verified)} tracks as ready_to_delete")
     print("Delete them manually in the Radiocult Media library using the Tag filter.")
+
+    # Prune completed entries from scan file
+    scan_path = "archive-scan.json"
+    if os.path.exists(scan_path):
+        with open(scan_path, "r", encoding="utf-8") as f:
+            scan_data = json.load(f)
+        deleted_ids = {tid for tid, e in state.state.items() if e.get("status") == "deleted"}
+        pruned = [t for t in scan_data if t["id"] not in deleted_ids]
+        if len(pruned) < len(scan_data):
+            with open(scan_path, "w", encoding="utf-8") as f:
+                json.dump(pruned, f, indent=2, ensure_ascii=False)
+            print(f"Pruned {len(scan_data) - len(pruned)} completed tracks from {scan_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -714,7 +764,7 @@ def main():
     if args.cleanup:
         rc.authenticate(headless=headless)
         drive = GoogleDriveClient()
-        mode_cleanup(rc, drive, state, args.dry_run)
+        mode_cleanup(rc, drive, state, args.dry_run, args.output, args.drive_folder)
 
 
 if __name__ == "__main__":
