@@ -4,13 +4,14 @@ Move old files from "éist - archive" on Google Drive to DS214play NAS cold stor
 
 Scans the archive folder on Google Drive for files older than 12 months,
 copies them to the Synology NAS via the File Station API (QuickConnect),
-verifies the transfer by size, and deletes the originals from Google Drive.
+verifies the transfer by size, then prints instructions to manually
+delete the originals from Google Drive.
 
 Modes:
-- (no flags)   → full run: scan → transfer → cleanup
+- (no flags)   → full run: scan → transfer → cleanup instructions
 - --scan       → list archive files older than --months, save manifest
 - --transfer   → download from Drive, upload to NAS, verify
-- --cleanup    → delete verified files from Google Drive
+- --cleanup    → print instructions to delete originals from Google Drive
 """
 
 import argparse
@@ -213,18 +214,6 @@ class GoogleDriveClient:
                     pct = downloaded * 100 // total
                     print(f"\r  Downloading: {pct}% ({downloaded // 1024 // 1024}MB)", end="", flush=True)
         print()
-
-    def delete_file(self, file_id: str) -> None:
-        resp = requests.delete(
-            f"{self.DRIVE_API}/{file_id}",
-            headers=self._headers(),
-        )
-        if self._refresh_token_if_needed(resp):
-            resp = requests.delete(
-                f"{self.DRIVE_API}/{file_id}",
-                headers=self._headers(),
-            )
-        resp.raise_for_status()
 
     def verify_file(self, file_id: str, expected_size: int = 0) -> bool:
         try:
@@ -665,65 +654,34 @@ def mode_transfer(
     print(f"\nTransferred {transferred}/{len(to_transfer)} files to NAS")
 
 
-def mode_cleanup(
-    drive: GoogleDriveClient,
-    state: ColdStorageState,
-    dry_run: bool,
-) -> None:
-    to_delete = {
+def mode_cleanup(state: ColdStorageState) -> None:
+    transferred = {
         fid: entry
         for fid, entry in state.state.items()
         if entry.get("status") == "transferred"
     }
 
-    if not to_delete:
-        print("No transferred files pending cleanup.")
+    if not transferred:
+        print("No transferred files to clean up.")
         return
 
-    print(f"\n{len(to_delete)} files to delete from Google Drive")
+    # Find the newest file date to use as the cutoff
+    dates = []
+    for entry in transferred.values():
+        created = entry.get("created") or entry.get("transferred_at", "")
+        if created:
+            dates.append(created[:10])
+    cutoff = max(dates) if dates else "unknown"
 
-    if dry_run:
-        print("\n[DRY RUN] Would delete from Drive:")
-        for fid, entry in to_delete.items():
-            print(f"  {entry.get('name', fid)}")
-        return
-
-    deleted = 0
-    for fid, entry in to_delete.items():
-        name = entry.get("name", fid)
-        try:
-            if not drive.verify_file(fid):
-                print(f"  {name}: already gone from Drive, marking deleted")
-                state.mark(fid, "deleted")
-                deleted += 1
-                continue
-
-            drive.delete_file(fid)
-            state.mark(fid, "deleted")
-            deleted += 1
-            print(f"  Deleted: {name}")
-
-        except requests.HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 404:
-                print(f"  {name}: already gone (404), marking deleted")
-                state.mark(fid, "deleted")
-                deleted += 1
-            else:
-                print(f"  WARNING: could not delete {name}: {exc}", file=sys.stderr)
-        except Exception as exc:
-            print(f"  WARNING: could not delete {name}: {exc}", file=sys.stderr)
-
-    print(f"\nDeleted {deleted}/{len(to_delete)} files from Google Drive")
-
-    if os.path.exists(SCAN_FILE):
-        with open(SCAN_FILE, "r", encoding="utf-8") as f:
-            scan_data = json.load(f)
-        deleted_ids = {fid for fid, e in state.state.items() if e.get("status") == "deleted"}
-        pruned = [f for f in scan_data if f["id"] not in deleted_ids]
-        if len(pruned) < len(scan_data):
-            with open(SCAN_FILE, "w", encoding="utf-8") as f:
-                json.dump(pruned, f, indent=2, ensure_ascii=False)
-            print(f"Pruned {len(scan_data) - len(pruned)} entries from {SCAN_FILE}")
+    print(f"\n{len(transferred)} files transferred to NAS.")
+    print(f"\nTo free up Drive space, delete the originals manually in Google Drive:")
+    print(f"")
+    print(f"  1. Open: https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID}")
+    print(f"  2. Click the search filter icon (▼) in the search bar")
+    print(f"  3. Set Type: Audio")
+    print(f"  4. Set Date modified: Before {cutoff}")
+    print(f"  5. Select all matching files and move to trash")
+    print(f"")
 
 
 # ---------------------------------------------------------------------------
@@ -740,7 +698,7 @@ def main():
     )
     parser.add_argument("--scan", action="store_true", help="List archive files older than --months")
     parser.add_argument("--transfer", action="store_true", help="Download from Drive, upload to NAS, verify")
-    parser.add_argument("--cleanup", action="store_true", help="Delete transferred files from Google Drive")
+    parser.add_argument("--cleanup", action="store_true", help="Print instructions to delete originals from Google Drive")
     parser.add_argument("--months", type=int, default=12, help="Age threshold in months (default: 12)")
     parser.add_argument("--output", default="./cold-storage-tmp", help="Temp download directory")
     parser.add_argument("--nas-path", default=NAS_BASE_PATH, help=f"NAS destination path (default: {NAS_BASE_PATH})")
@@ -757,7 +715,7 @@ def main():
             if os.path.exists(stale):
                 os.remove(stale)
                 print(f"Removed stale state file: {stale}")
-        print("No mode specified — running full scan → transfer → cleanup\n")
+        print("No mode specified — running full scan → transfer → cleanup instructions\n")
 
     nas_user = os.getenv("NAS_USER", "")
     nas_password = os.getenv("NAS_PASSWORD", "")
@@ -779,7 +737,7 @@ def main():
         mode_transfer(drive, nas, state, args.months, args.output, args.nas_path, args.dry_run)
 
     if args.cleanup:
-        mode_cleanup(drive, state, args.dry_run)
+        mode_cleanup(state)
 
     nas.logout()
 
