@@ -1,4 +1,6 @@
 __pycache__/
 .env
 *.json
-error_screenshot_*.pngerror-screenshot.png
+error_screenshot_*.png
+error-screenshot.png
+cold-storage-tmp/
