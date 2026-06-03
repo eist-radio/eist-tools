@@ -148,6 +148,61 @@ The cleanup step checks the next 12 weeks of scheduled shows and will not delete
 - `archive-scan.json` — last scan results (re-used by `--archive` if present)
 - `archive-state.json` — tracks archive/delete status per file, ensures re-runs are idempotent
 
+## Cold Storage (Google Drive → NAS)
+
+Moves old files from the `éist - archive` Google Drive folder to the DS214play Synology NAS for long-term cold storage. Files older than 12 months are downloaded from Drive, uploaded to the NAS via the File Station API (QuickConnect), verified by size, then you manually delete the originals from Drive.
+
+### Prerequisites
+
+- **gcloud CLI** — same auth as the archive manager: `gcloud auth login eistcork@gmail.com --enable-gdrive-access`
+- **Synology NAS** — File Station package installed, with a shared folder matching the `--nas-path` root (default: `music`)
+- NAS credentials in `.env`:
+
+```env
+NAS_USER=your_nas_username
+NAS_PASSWORD=your_nas_password
+```
+
+### Modes
+
+```bash
+# Full run (default): scan → transfer → cleanup instructions
+python scripts/cold-storage.py --nas-url https://192.168.1.29:5001
+
+# Scan: list archive files older than 12 months
+python scripts/cold-storage.py --scan
+
+# Transfer: download from Drive, upload to NAS, verify
+python scripts/cold-storage.py --transfer --nas-url https://192.168.1.29:5001
+
+# Cleanup: print instructions to manually delete originals from Drive
+python scripts/cold-storage.py --cleanup
+
+# Preview without making changes
+python scripts/cold-storage.py --dry-run
+```
+
+### Options
+
+- `--months N` — age threshold in months (default: 12)
+- `--output DIR` — temp download directory (default: `./cold-storage-tmp`)
+- `--nas-path PATH` — NAS destination path (default: `/music/eist-archive`)
+- `--nas-url URL` — direct NAS URL, skips QuickConnect resolution (e.g. `https://192.168.1.29:5001`)
+- `--dry-run` — preview without making changes
+
+### NAS connection
+
+By default, the script resolves the NAS address via Synology QuickConnect (ID: `eistcork`). For large file transfers, use `--nas-url` to connect directly over the LAN — the QuickConnect relay can't handle large uploads reliably.
+
+### State files
+
+- `cold-storage-scan.json` — last scan results (re-used by `--transfer` if present)
+- `cold-storage-state.json` — tracks transfer status per file, ensures re-runs are idempotent
+
+### Drive cleanup
+
+After transferring, `--cleanup` prints instructions to find and delete the originals from Google Drive using the advanced search UI (Type: Audio, Date modified: before the cutoff date). Automated deletion is not supported due to gcloud's read-only Drive scope.
+
 ## Automated Workflow (GitHub Actions)
 
 The `.github/workflows/schedule-repeat-shows.yml` workflow runs automatically:
