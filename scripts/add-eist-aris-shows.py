@@ -585,46 +585,9 @@ class EistArisScheduler:
         page.wait_for_timeout(1_000)
         print("  ✓ Modal opened")
 
-        # 2. Start time (react-aria spinbutton inputs)
-        print(f"\n[2] Setting start time to {start_time_str}...")
-        start_h, start_m = start_time_str.split(":")
-        time_groups = page.locator('div[role="group"][aria-label="Time"]')
-        start_group = time_groups.nth(0)
-        hour_spin = start_group.locator('div[data-type="hour"]')
-        hour_spin.click()
-        page.wait_for_timeout(200)
-        page.keyboard.press("Control+a")
-        page.keyboard.type(start_h, delay=100)
-        page.wait_for_timeout(300)
-        minute_spin = start_group.locator('div[data-type="minute"]')
-        minute_spin.click()
-        page.wait_for_timeout(200)
-        page.keyboard.press("Control+a")
-        page.keyboard.type(start_m, delay=100)
-        page.wait_for_timeout(300)
-        print("  ✓ Start time set")
-
-        # 3. End time (react-aria spinbutton inputs)
-        print(f"\n[3] Setting end time to {end_time_str}...")
-        end_h, end_m = end_time_str.split(":")
-        end_group = time_groups.nth(1)
-        end_hour_spin = end_group.locator('div[data-type="hour"]')
-        end_hour_spin.click()
-        page.wait_for_timeout(200)
-        page.keyboard.press("Control+a")
-        page.keyboard.type(end_h, delay=100)
-        page.wait_for_timeout(300)
-        end_minute_spin = end_group.locator('div[data-type="minute"]')
-        end_minute_spin.click()
-        page.wait_for_timeout(200)
-        page.keyboard.press("Control+a")
-        page.keyboard.type(end_m, delay=100)
-        page.wait_for_timeout(300)
-        print("  ✓ End time set")
-
-        # 4. Start date
+        # 2. Start date (set BEFORE time to avoid false conflict checks)
         start_day = start_time.day
-        print(f"\n[4] Setting start date to {start_date}...")
+        print(f"\n[2] Setting start date to {start_date}...")
         try:
             date_input = page.locator('input[id^="startDate"]')
             date_input.click()
@@ -650,9 +613,9 @@ class EistArisScheduler:
         except Exception as exc:
             print(f"  ✗ Could not select start date: {exc}")
 
-        # 5. End date (same day as start)
+        # 3. End date (same day as start)
         end_day = start_day
-        print(f"\n[5] Setting end date to same day (day {end_day})...")
+        print(f"\n[3] Setting end date to same day (day {end_day})...")
 
         try:
             end_input = page.locator('input[id^="endDate"]')
@@ -681,6 +644,43 @@ class EistArisScheduler:
                 print("  ℹ End date selector not present, skipping")
         except Exception as exc:
             print(f"  ✗ Could not select end date: {exc}")
+
+        # 4. Start time (react-aria spinbutton inputs)
+        print(f"\n[4] Setting start time to {start_time_str}...")
+        start_h, start_m = start_time_str.split(":")
+        time_groups = page.locator('div[role="group"][aria-label="Time"]')
+        start_group = time_groups.nth(0)
+        hour_spin = start_group.locator('div[data-type="hour"]')
+        hour_spin.click()
+        page.wait_for_timeout(200)
+        page.keyboard.press("Control+a")
+        page.keyboard.type(start_h, delay=100)
+        page.wait_for_timeout(300)
+        minute_spin = start_group.locator('div[data-type="minute"]')
+        minute_spin.click()
+        page.wait_for_timeout(200)
+        page.keyboard.press("Control+a")
+        page.keyboard.type(start_m, delay=100)
+        page.wait_for_timeout(300)
+        print("  ✓ Start time set")
+
+        # 5. End time (react-aria spinbutton inputs)
+        print(f"\n[5] Setting end time to {end_time_str}...")
+        end_h, end_m = end_time_str.split(":")
+        end_group = time_groups.nth(1)
+        end_hour_spin = end_group.locator('div[data-type="hour"]')
+        end_hour_spin.click()
+        page.wait_for_timeout(200)
+        page.keyboard.press("Control+a")
+        page.keyboard.type(end_h, delay=100)
+        page.wait_for_timeout(300)
+        end_minute_spin = end_group.locator('div[data-type="minute"]')
+        end_minute_spin.click()
+        page.wait_for_timeout(200)
+        page.keyboard.press("Control+a")
+        page.keyboard.type(end_m, delay=100)
+        page.wait_for_timeout(300)
+        print("  ✓ End time set")
 
         # 6. Title
         show_title = f"{show['title']} (éist arís)"
@@ -1339,10 +1339,13 @@ def mode_check_slot(
             elif media_type == "mix" and track_id:
                 print(f"    → Pre-record with file attached. No action needed.")
             elif media_type == "mix" and not track_id:
-                print(f"    → ⚠ Pre-record WITHOUT file! Needs replacement.")
-                action = "replace"
-                broken_show = show
-                break
+                if show.get("isRecurring"):
+                    print(f"    → ⚠ Recurring pre-record WITHOUT file. Skipping (recurring events cannot be auto-replaced).")
+                else:
+                    print(f"    → ⚠ Pre-record WITHOUT file! Needs replacement.")
+                    action = "replace"
+                    broken_show = show
+                    break
             else:
                 print(f"    → Unknown media type '{media_type}'. Skipping.")
 
@@ -1490,14 +1493,19 @@ def mode_check_slot(
                 print(f"  Slot: {slot_data['start']} - {slot_data['end']}")
                 print("=" * 80)
             except Exception as exc:
-                print(f"\n✗ Failed to create show: {exc}")
-                try:
-                    page.screenshot(path="error_screenshot_create.png")
-                    print("  Screenshot saved to error_screenshot_create.png")
-                except Exception:
-                    pass
-                scheduler.close_any_open_modals(page)
-                raise
+                if "conflicts" in str(exc).lower():
+                    print(f"\n⚠ Conflict with existing event (likely a recurring rule).")
+                    print("  This slot cannot be auto-filled. Manual intervention needed.")
+                    scheduler.close_any_open_modals(page)
+                else:
+                    print(f"\n✗ Failed to create show: {exc}")
+                    try:
+                        page.screenshot(path="error_screenshot_create.png")
+                        print("  Screenshot saved to error_screenshot_create.png")
+                    except Exception:
+                        pass
+                    scheduler.close_any_open_modals(page)
+                    raise
 
         except Exception as exc:
             print(f"\nError during check-slot execution: {exc}")

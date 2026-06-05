@@ -4,3 +4,4 @@ __pycache__/
 error_screenshot_*.png
 error-screenshot.png
 cold-storage-tmp/
+archive-tmp/
