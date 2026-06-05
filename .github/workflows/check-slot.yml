@@ -1,0 +1,100 @@
+name: Check and fix schedule slots
+
+on:
+  schedule:
+    # Run at :45 past every hour from 08:45-23:45 UTC
+    - cron: '45 8-23 * * *'
+
+  workflow_dispatch:
+    inputs:
+      target_datetime:
+        description: 'Target datetime (YYYY-MM-DD HH:MM:SS UTC) - defaults to current time'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run mode (only print, do not create/delete shows)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: check-slot
+  cancel-in-progress: false
+
+jobs:
+  check-slot:
+    runs-on: ubuntu-latest
+
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
+      RADIOCULT_USER: ${{ secrets.RADIOCULT_USER }}
+      RADIOCULT_PW: ${{ secrets.RADIOCULT_PW }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests python-dotenv playwright
+
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Calculate target datetime
+        id: datetime
+        run: |
+          if [ -n "${{ inputs.target_datetime }}" ]; then
+            TARGET_DATETIME="${{ inputs.target_datetime }}"
+          else
+            TARGET_DATETIME=$(date -u +"%Y-%m-%d %H:%M:%S")
+          fi
+          echo "target_datetime=$TARGET_DATETIME" >> $GITHUB_OUTPUT
+          echo "Target datetime: $TARGET_DATETIME"
+
+      - name: Check and fix slot
+        run: |
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            echo "Running in DRY RUN mode"
+            python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless --dry-run
+          else
+            python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless
+          fi
+
+      - name: Upload error screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: check-slot-errors-${{ github.run_number }}
+          path: error_screenshot_*.png
+          retention-days: 7
+
+      - name: Display summary
+        if: always()
+        run: |
+          echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target datetime:** ${{ steps.datetime.outputs.target_datetime }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            echo "**Mode:** DRY RUN" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "**Status:** Completed successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status:** Failed - check logs and error screenshots" >> $GITHUB_STEP_SUMMARY
+          fi
