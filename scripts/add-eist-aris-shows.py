@@ -777,6 +777,55 @@ class EistArisScheduler:
         print(f"SUCCESS! Created '{show_title}'")
         print("=" * 60 + "\n")
 
+    def delete_show_via_playwright(self, page, show_title: str, slot_start: datetime) -> None:
+        """Delete an existing show from the schedule via Playwright."""
+        week_start = slot_start - timedelta(days=slot_start.weekday())
+        week_str = week_start.strftime("%Y-%m-%d")
+
+        print(f"\nDeleting show: '{show_title}'")
+        print(f"Navigating to schedule week: {week_str}")
+
+        page.goto(f"{WEB_BASE_URL}/schedule?w={week_str}")
+        page.wait_for_load_state("networkidle", timeout=15_000)
+
+        # Click on the show in the calendar
+        print("  Looking for show in calendar...")
+        show_element = page.locator(f'text="{show_title}"').first
+        show_element.click()
+        page.wait_for_timeout(1_000)
+        print("  ✓ Show clicked")
+
+        # Click the delete/trash button in the show detail panel
+        print("  Looking for delete button...")
+        try:
+            delete_btn = page.locator('button:has(svg), button:has-text("Delete")').filter(
+                has_text="Delete"
+            ).first
+            delete_btn.click()
+            page.wait_for_timeout(1_000)
+            print("  ✓ Delete button clicked")
+        except Exception:
+            # Try alternative: look for a trash icon button
+            delete_btn = page.locator('[aria-label*="delete" i], [aria-label*="remove" i]').first
+            delete_btn.click()
+            page.wait_for_timeout(1_000)
+            print("  ✓ Delete button clicked (alt selector)")
+
+        # Confirm the deletion dialog
+        print("  Confirming deletion...")
+        try:
+            confirm_btn = page.locator(
+                'button:has-text("Delete"), button:has-text("Confirm"), button:has-text("Yes")'
+            ).last
+            confirm_btn.click()
+            page.wait_for_timeout(2_000)
+            print("  ✓ Deletion confirmed")
+        except Exception as exc:
+            print(f"  ✗ Could not confirm deletion: {exc}")
+            raise
+
+        print(f"  ✓ Show '{show_title}' deleted successfully")
+
 
 # -----------------------------------------------------------------------------
 # Mode handlers
