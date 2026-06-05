@@ -48,6 +48,13 @@ def parse_target_date(date_str: str) -> datetime:
         sys.exit(1)
 
 
+def round_up_to_hour(dt: datetime) -> datetime:
+    """Round a datetime up to the next full hour. If already on the hour, return as-is."""
+    if dt.minute == 0 and dt.second == 0 and dt.microsecond == 0:
+        return dt
+    return (dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+
+
 class EistArisScheduler:
     """Handles fetching and scheduling éist arís replay shows."""
 
