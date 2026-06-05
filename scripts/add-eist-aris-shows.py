@@ -19,6 +19,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
+
 import requests
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
@@ -561,7 +562,7 @@ class EistArisScheduler:
         print("\n" + "=" * 60)
         print(f"Creating: {show['title']} (éist arís)")
         print(f"When: {day_of_week}, {start_date}")
-        print(f"Time: {start_time_str} - {end_time_str} ({scheduled_duration}min)")
+        print(f"Time: {start_time_str} - {end_time_str} UTC ({scheduled_duration}min)")
         print("=" * 60)
 
         week_start = start_time - timedelta(days=start_time.weekday())
@@ -584,32 +585,41 @@ class EistArisScheduler:
         page.wait_for_timeout(1_000)
         print("  ✓ Modal opened")
 
-        # 2. Start time
+        # 2. Start time (react-aria spinbutton inputs)
         print(f"\n[2] Setting start time to {start_time_str}...")
-        start_input = page.locator('input[aria-labelledby*="startTime"]')
-        start_input.click()
-        page.wait_for_timeout(500)
-        start_input.fill("")
+        start_h, start_m = start_time_str.split(":")
+        time_groups = page.locator('div[role="group"][aria-label="Time"]')
+        start_group = time_groups.nth(0)
+        hour_spin = start_group.locator('div[data-type="hour"]')
+        hour_spin.click()
         page.wait_for_timeout(200)
-        formatted_start_time = self.format_time_for_gui(start_time_str)
-        page.keyboard.type(formatted_start_time, delay=150)
-        page.wait_for_timeout(1_200)
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(600)
+        page.keyboard.press("Control+a")
+        page.keyboard.type(start_h, delay=100)
+        page.wait_for_timeout(300)
+        minute_spin = start_group.locator('div[data-type="minute"]')
+        minute_spin.click()
+        page.wait_for_timeout(200)
+        page.keyboard.press("Control+a")
+        page.keyboard.type(start_m, delay=100)
+        page.wait_for_timeout(300)
         print("  ✓ Start time set")
 
-        # 3. End time
+        # 3. End time (react-aria spinbutton inputs)
         print(f"\n[3] Setting end time to {end_time_str}...")
-        end_input = page.locator('input[aria-labelledby*="endTime"]')
-        end_input.click()
-        page.wait_for_timeout(500)
-        end_input.fill("")
+        end_h, end_m = end_time_str.split(":")
+        end_group = time_groups.nth(1)
+        end_hour_spin = end_group.locator('div[data-type="hour"]')
+        end_hour_spin.click()
         page.wait_for_timeout(200)
-        formatted_end_time = self.format_time_for_gui(end_time_str)
-        page.keyboard.type(formatted_end_time, delay=150)
-        page.wait_for_timeout(1_200)
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(600)
+        page.keyboard.press("Control+a")
+        page.keyboard.type(end_h, delay=100)
+        page.wait_for_timeout(300)
+        end_minute_spin = end_group.locator('div[data-type="minute"]')
+        end_minute_spin.click()
+        page.wait_for_timeout(200)
+        page.keyboard.press("Control+a")
+        page.keyboard.type(end_m, delay=100)
+        page.wait_for_timeout(300)
         print("  ✓ End time set")
 
         # 4. Start date
@@ -753,13 +763,22 @@ class EistArisScheduler:
         page.wait_for_timeout(1_000)
         print("  ✓ Search completed")
 
-        # 12. Select track
+        # 12. Select track (click first search result in media table)
         print("\n[12] Selecting track from results...")
         try:
-            track_row = page.locator(f'tr:has-text("{track_title}")').first
-            track_row.click()
+            # Media results table has an "Album" column (unique vs calendar tables)
+            media_table = page.locator('table:has(th:has-text("Album"))')
+            result_rows = media_table.locator("tr").filter(
+                has=page.locator("td")
+            )
+            row_count = result_rows.count()
+            if row_count == 0:
+                raise Exception(
+                    f"No media found matching '{track_title}'"
+                )
+            result_rows.first.click()
             page.wait_for_timeout(500)
-            print("  ✓ Track selected")
+            print(f"  ✓ Track selected (from {row_count} result(s))")
         except Exception as exc:
             print(f"  ! Could not select track: {exc}")
             raise Exception(f"Failed to select track '{track_title}'") from exc
@@ -770,7 +789,24 @@ class EistArisScheduler:
             'button[type="submit"]:has-text("Create event")'
         )
         create_button.click()
-        page.wait_for_timeout(2_000)
+        page.wait_for_timeout(3_000)
+
+        # Check for conflict error dialog
+        conflict = page.locator('text="This event conflicts with another"')
+        if conflict.count() > 0:
+            close_btn = page.locator('button:has-text("Close")')
+            if close_btn.count() > 0:
+                close_btn.first.click()
+                page.wait_for_timeout(500)
+            raise Exception("Event conflicts with an existing show in this time slot")
+
+        # Verify modal closed (indicates success)
+        create_still_visible = page.locator(
+            'button[type="submit"]:has-text("Create event")'
+        ).count()
+        if create_still_visible > 0:
+            raise Exception("Create event form still open — submission may have failed")
+
         print("  ✓ Event created")
 
         print("\n" + "=" * 60)
@@ -1400,8 +1436,33 @@ def mode_check_slot(
             page.fill('input[type="email"]', login_username or "")
             page.fill('input[type="password"]', login_password or "")
             page.click('button[type="submit"]')
+            page.wait_for_load_state("networkidle", timeout=15_000)
             page.wait_for_timeout(2_000)
             print("✓ Logged in\n")
+
+            # Copy browser cookies to API session for track lookups
+            for cookie in context.cookies():
+                scheduler.session.cookies.set(
+                    cookie.get("name", ""),
+                    cookie.get("value", ""),
+                    domain=cookie.get("domain"),
+                    path=cookie.get("path"),
+                )
+
+            # Fetch actual track title from media API (needs auth cookies)
+            track_id = replacement.get("track_id")
+            if track_id and not replacement.get("track_title"):
+                track_details = scheduler.fetch_track_details(track_id)
+                if track_details:
+                    tracks = track_details.get("tracks") or []
+                    matching = next(
+                        (t for t in tracks if t.get("id") == track_id), None
+                    )
+                    if matching and matching.get("title"):
+                        replacement["track_title"] = matching["title"]
+                        print(f"Track title resolved: {replacement['track_title']}")
+                    else:
+                        print("⚠ Could not find track title in media API")
 
             # Step 1: Delete broken show if replacing
             if action == "replace" and broken_show:
