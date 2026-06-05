@@ -1372,7 +1372,7 @@ def mode_check_slot(
         print("DRY RUN - No changes will be made")
         print("=" * 80)
 
-        if action == "replace":
+        if action == "replace" and broken_show:
             print(f"\nWould DELETE: '{broken_show.get('title', '(no title)')}'")
 
         print(f"\nWould CREATE:")
@@ -1519,6 +1519,11 @@ def main() -> None:
         action="store_true",
         help="Print what would be done without making any changes",
     )
+    parser.add_argument(
+        "--check-slot",
+        action="store_true",
+        help="Check if the next hour's slot is empty or has a fileless pre-record, and auto-fix",
+    )
 
     args = parser.parse_args()
 
@@ -1547,9 +1552,21 @@ def main() -> None:
         )
         return
 
+    if args.check_slot:
+        mode_check_slot(
+            scheduler,
+            args,
+            target_date,
+            login_username,
+            login_password,
+            args.headless,
+            args.dry_run,
+        )
+        return
+
     print(
         "\nError: No mode specified. Use one of "
-        "--output-tracks, --output-schedule, --test-slots, --plan, or --execute",
+        "--output-tracks, --output-schedule, --test-slots, --plan, --execute, or --check-slot",
         file=sys.stderr,
     )
     sys.exit(1)
