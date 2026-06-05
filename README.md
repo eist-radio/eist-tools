@@ -79,6 +79,23 @@ python scripts/add-eist-aris-shows.py "2025-12-08" --execute --dry-run
 python scripts/add-eist-aris-shows.py "2025-12-08" --execute
 ```
 
+### Hourly Slot Check
+
+Checks if the next hour has an empty slot or a pre-record show without a file attached. If so, picks a random eligible show from the last 4 weeks and creates it as an éist arís replay.
+
+```bash
+# Check the next hour from a specific time (dry run)
+python scripts/add-eist-aris-shows.py "2026-06-05 14:45:00" --check-slot --dry-run
+
+# Check and auto-fix (live)
+python scripts/add-eist-aris-shows.py "2026-06-05 14:45:00" --check-slot
+
+# Headless mode for CI
+python scripts/add-eist-aris-shows.py "2026-06-05 14:45:00" --check-slot --headless
+```
+
+The input time is rounded up to the next full hour. Only 1hr shows are used as replacements.
+
 ### Command-line Options
 
 **Required:**
@@ -90,6 +107,7 @@ python scripts/add-eist-aris-shows.py "2025-12-08" --execute
 - `--test-slots` - Generate empty-slots.json
 - `--plan` - Generate updated-slots.json
 - `--execute` - Create shows from plan
+- `--check-slot` - Check next hour's slot and auto-fix if empty or fileless pre-record
 
 **Optional flags:**
 - `--weeks-back N` - Weeks to look back for shows (default: 3)
@@ -228,3 +246,13 @@ After a workflow run:
 1. Check the workflow summary for show counts
 2. Download artifacts to see JSON files
 3. Review logs for detailed output
+
+### Hourly Slot Check (GitHub Actions)
+
+The `.github/workflows/check-slot.yml` workflow runs automatically:
+
+- **Schedule**: Every hour at :45 past (08:45-23:45 UTC)
+- **Action**: Checks the next hour's slot and auto-fixes if empty or has a fileless pre-record
+- **Mode**: LIVE (creates/deletes shows as needed)
+
+You can trigger it manually from Actions → Check and fix schedule slots with an optional target datetime and dry-run flag.
