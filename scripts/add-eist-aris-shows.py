@@ -1232,6 +1232,221 @@ def mode_execute(
             browser.close()
 
 
+def mode_check_slot(
+    scheduler: EistArisScheduler,
+    args,
+    target_date: datetime,
+    login_username: Optional[str],
+    login_password: Optional[str],
+    headless: bool = False,
+    dry_run: bool = False,
+):
+    """Check the next hour's slot and auto-fix if empty or missing a file."""
+    slot_start = round_up_to_hour(target_date)
+    slot_end = slot_start + timedelta(hours=1)
+
+    print("\n" + "=" * 80)
+    print("MODE: Check Slot")
+    print("=" * 80)
+    print(f"\nInput time:  {target_date.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Target slot: {slot_start.strftime('%Y-%m-%d %H:%M')} - {slot_end.strftime('%H:%M')} UTC")
+
+    # Check broadcast window (09:00-23:00 UTC)
+    if slot_start.hour < 9 or slot_start.hour >= 23:
+        print(f"\n✓ Slot at {slot_start.strftime('%H:%M')} UTC is outside broadcast hours (09:00-23:00). No action needed.")
+        return
+
+    # Fetch schedule with a small buffer around the slot
+    fetch_start = slot_start - timedelta(minutes=10)
+    fetch_end = slot_end + timedelta(minutes=10)
+    print(f"\nFetching schedule for {fetch_start.strftime('%H:%M')}-{fetch_end.strftime('%H:%M')} UTC...")
+
+    schedule = scheduler.fetch_schedule(fetch_start, fetch_end)
+
+    # Filter to shows that overlap our target slot
+    overlapping = []
+    for show in schedule:
+        show_start_str = show.get("start") or show.get("startDateUtc")
+        show_end_str = show.get("end") or show.get("endDateUtc")
+        if not show_start_str or not show_end_str:
+            continue
+
+        show_start = datetime.fromisoformat(show_start_str.replace("Z", "+00:00")).replace(tzinfo=None)
+        show_end = datetime.fromisoformat(show_end_str.replace("Z", "+00:00")).replace(tzinfo=None)
+
+        # Show overlaps slot if it starts before slot ends AND ends after slot starts
+        if show_start < slot_end and show_end > slot_start:
+            overlapping.append(show)
+
+    if not overlapping:
+        print(f"\n⚠ Slot {slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')} is EMPTY. Needs filling.")
+        action = "fill"
+        broken_show = None
+    else:
+        # Check each overlapping show
+        print(f"\nFound {len(overlapping)} show(s) in slot:")
+        action = None
+        broken_show = None
+
+        for show in overlapping:
+            title = show.get("title", "(no title)")
+            media = show.get("media", {})
+            media_type = media.get("type", "unknown")
+            track_id = media.get("trackId")
+
+            print(f"  - '{title}' | media.type={media_type} | trackId={'yes' if track_id else 'MISSING'}")
+
+            if media_type == "live":
+                print(f"    → Live show. No action needed.")
+            elif media_type == "playlist":
+                print(f"    → Playlist show. No action needed.")
+            elif media_type == "mix" and track_id:
+                print(f"    → Pre-record with file attached. No action needed.")
+            elif media_type == "mix" and not track_id:
+                print(f"    → ⚠ Pre-record WITHOUT file! Needs replacement.")
+                action = "replace"
+                broken_show = show
+                break
+            else:
+                print(f"    → Unknown media type '{media_type}'. Skipping.")
+
+        if action is None:
+            print(f"\n✓ Slot is OK. No action needed.")
+            return
+
+    # --- Action needed: fill empty slot or replace broken pre-record ---
+
+    print(f"\nAction: {action.upper()}")
+
+    # Fetch eligible replacement shows from last 4 weeks
+    print("\nFetching eligible replacement shows from last 4 weeks...")
+    eligible_shows = scheduler.build_replay_list(slot_start, weeks_back=4)
+
+    # Filter to 1hr shows only
+    eligible_1hr = [s for s in eligible_shows if s.get("scheduled_duration") == 60]
+    print(f"Eligible 1hr shows: {len(eligible_1hr)}")
+
+    if not eligible_1hr:
+        print("\n⚠ No eligible 1hr shows found for replacement. Exiting.")
+        return
+
+    # Exclude shows already in this week's schedule to prevent duplicates
+    week_start = scheduler.get_week_start(slot_start)
+    week_end = week_start + timedelta(days=7)
+    week_schedule = scheduler.fetch_schedule(week_start, week_end)
+
+    scheduled_track_ids = set()
+    for show in week_schedule:
+        media = show.get("media", {})
+        tid = media.get("trackId")
+        if tid:
+            scheduled_track_ids.add(tid)
+
+    eligible_1hr = [s for s in eligible_1hr if s.get("track_id") not in scheduled_track_ids]
+    print(f"After duplicate filtering: {len(eligible_1hr)} eligible shows")
+
+    if not eligible_1hr:
+        print("\n⚠ All eligible shows are already scheduled this week. Exiting.")
+        return
+
+    # Pick a random replacement
+    replacement = random.choice(eligible_1hr)
+    print(f"\nSelected replacement: '{replacement['title']}'")
+    print(f"  Track ID: {replacement.get('track_id')}")
+    print(f"  Duration: {replacement.get('duration')} min")
+
+    # Build the slot and show mapping for create_show_from_mapping()
+    slot_data = {
+        "start": slot_start.strftime("%Y-%m-%d %H:%M"),
+        "end": slot_end.strftime("%Y-%m-%d %H:%M"),
+        "duration_minutes": 60,
+        "scheduled_duration": 60,
+        "day_of_week": slot_start.strftime("%A"),
+        "date": slot_start.strftime("%Y-%m-%d"),
+    }
+
+    mapping = {"slot": slot_data, "show": replacement}
+
+    if dry_run:
+        print("\n" + "=" * 80)
+        print("DRY RUN - No changes will be made")
+        print("=" * 80)
+
+        if action == "replace":
+            print(f"\nWould DELETE: '{broken_show.get('title', '(no title)')}'")
+
+        print(f"\nWould CREATE:")
+        print(f"  Title: {replacement['title']} (éist arís)")
+        print(f"  Slot: {slot_data['day_of_week']}, {slot_data['date']}")
+        print(f"  Time: {slot_data['start']} - {slot_data['end']}")
+        print(f"  Track ID: {replacement.get('track_id', 'N/A')}")
+
+        print("\n" + "=" * 80)
+        print("DRY RUN COMPLETE")
+        print("=" * 80)
+        return
+
+    # --- Live execution with Playwright ---
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        context = browser.new_context()
+        page = context.new_page()
+
+        try:
+            print("\nLogging in...")
+            page.goto(f"{WEB_BASE_URL}/login")
+            page.wait_for_selector('input[type="email"]', timeout=10_000)
+            page.fill('input[type="email"]', login_username or "")
+            page.fill('input[type="password"]', login_password or "")
+            page.click('button[type="submit"]')
+            page.wait_for_timeout(2_000)
+            print("✓ Logged in\n")
+
+            # Step 1: Delete broken show if replacing
+            if action == "replace" and broken_show:
+                try:
+                    scheduler.delete_show_via_playwright(
+                        page,
+                        broken_show.get("title", ""),
+                        slot_start,
+                    )
+                except Exception as exc:
+                    print(f"\n✗ Failed to delete show: {exc}")
+                    try:
+                        page.screenshot(path="error_screenshot_delete.png")
+                        print("  Screenshot saved to error_screenshot_delete.png")
+                    except Exception:
+                        pass
+                    raise
+
+            # Step 2: Create replacement show
+            try:
+                print(f"\nCreating replacement show...")
+                scheduler.create_show_from_mapping(page, mapping)
+                print("\n" + "=" * 80)
+                print(f"✓ SUCCESS: Created '{replacement['title']} (éist arís)'")
+                print(f"  Slot: {slot_data['start']} - {slot_data['end']}")
+                print("=" * 80)
+            except Exception as exc:
+                print(f"\n✗ Failed to create show: {exc}")
+                try:
+                    page.screenshot(path="error_screenshot_create.png")
+                    print("  Screenshot saved to error_screenshot_create.png")
+                except Exception:
+                    pass
+                scheduler.close_any_open_modals(page)
+                raise
+
+        except Exception as exc:
+            print(f"\nError during check-slot execution: {exc}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        finally:
+            browser.close()
+
+
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
