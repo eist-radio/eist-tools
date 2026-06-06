@@ -587,13 +587,10 @@ class EistArisScheduler:
 
         artist_ids = show.get("artist_ids") or []
 
-        description = show.get("description", "")
-        if isinstance(description, dict):
-            description = ""
+        description = show.get("description")
 
         create_payload: Dict = {
             "title": show_title,
-            "description": description,
             "startDateUtc": start_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
             "endDateUtc": end_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
             "duration": scheduled_duration,
@@ -605,6 +602,8 @@ class EistArisScheduler:
         if artist_ids:
             create_payload["artistIds"] = artist_ids
             print(f"  Artist IDs: {artist_ids}")
+        if isinstance(description, dict):
+            create_payload["description"] = description
 
         api_result = page.evaluate("""async (payload) => {
             try {
