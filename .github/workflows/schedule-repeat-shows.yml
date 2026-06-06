@@ -80,7 +80,13 @@ jobs:
       - name: Step 5 - Execute plan (create shows)
         run: |
           echo "::group::Creating shows via API"
-          python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --execute --headless
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            echo "Scheduled run — DRY RUN mode"
+            python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --execute --headless --dry-run
+          else
+            echo "Manual run — LIVE mode"
+            python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --execute --headless
+          fi
           echo "::endgroup::"
 
       - name: Upload artifacts (on success)
@@ -114,7 +120,11 @@ jobs:
           echo "## Show Scheduling Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Target Week:** ${{ steps.date.outputs.target_date }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            echo "**Mode:** DRY RUN" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f updated-slots.json ]; then
