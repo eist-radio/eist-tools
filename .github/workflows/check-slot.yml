@@ -2,9 +2,10 @@ name: Check and fix schedule slots
 
 on:
   schedule:
-    # Run at :45 past every hour, 08:45-21:45 UTC
+    # Run at :30 past every hour, 08:30-21:30 UTC
+    # Gives GitHub's scheduler ~30min of slack to fire before the target hour
     # Covers 9am-11pm Irish time year-round (IST=UTC+1 summer, GMT=UTC winter)
-    - cron: '45 8-21 * * *'
+    - cron: '30 8-21 * * *'
 
   workflow_dispatch:
     inputs:
