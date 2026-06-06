@@ -323,7 +323,8 @@ class EistArisScheduler:
             )
 
             day_shows = [
-                s for s in occupied_slots if day_start <= s["start"] < day_end
+                s for s in occupied_slots
+                if s["start"] < day_end and s["end"] > day_start
             ]
 
             print(f"\n{current_day.strftime('%A %Y-%m-%d')}:")
