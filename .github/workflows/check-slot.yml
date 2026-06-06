@@ -66,12 +66,12 @@ jobs:
 
       - name: Check and fix slot
         run: |
-          if [ "${{ inputs.dry_run }}" == "false" ]; then
-            echo "Running in LIVE mode"
-            python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless
-          else
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
             echo "Running in DRY RUN mode"
             python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless --dry-run
+          else
+            echo "Running in LIVE mode"
+            python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless
           fi
 
       - name: Upload error screenshots
