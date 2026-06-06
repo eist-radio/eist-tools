@@ -114,7 +114,14 @@ class EistArisScheduler:
                 page.fill('input[type="email"]', self.login_username)
                 page.fill('input[type="password"]', self.login_password)
                 page.click('button[type="submit"]')
-                page.wait_for_timeout(3_000)
+                page.wait_for_load_state("networkidle", timeout=15_000)
+                page.wait_for_timeout(2_000)
+
+                if "/login" in page.url:
+                    print("Warning: Still on login page after submit — login may have failed",
+                          file=sys.stderr)
+                    browser.close()
+                    return
 
                 for cookie in context.cookies():
                     self.session.cookies.set(
@@ -1239,6 +1246,25 @@ def mode_check_slot(
         print("\n⚠ All eligible shows are already scheduled this week. Exiting.")
         return
 
+    # Validate track files still exist in the media library
+    validated = []
+    for s in eligible_1hr:
+        tid = s.get("track_id")
+        if not tid:
+            continue
+        track_data = scheduler.fetch_track_details(tid)
+        if track_data and track_data.get("tracks"):
+            validated.append(s)
+        else:
+            print(f"  Skipping '{s['title']}' — track file deleted from media library")
+
+    eligible_1hr = validated
+    print(f"After track validation: {len(eligible_1hr)} eligible shows")
+
+    if not eligible_1hr:
+        print("\n⚠ No eligible shows with valid track files. Exiting.")
+        return
+
     # Pick a random replacement
     replacement = random.choice(eligible_1hr)
     print(f"\nSelected replacement: '{replacement['title']}'")
@@ -1318,7 +1344,7 @@ def mode_check_slot(
                         replacement["track_title"] = matching["title"]
                         print(f"Track title resolved: {replacement['track_title']}")
                     else:
-                        print("⚠ Could not find track title in media API")
+                        print("  Track title not found (file already validated)")
 
             # Step 1: Delete broken show if replacing
             if action == "replace" and broken_show:
