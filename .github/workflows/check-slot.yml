@@ -4,7 +4,6 @@ on:
   schedule:
     # Run at :45 past every hour, 08:45-21:45 UTC
     # Covers 9am-11pm Irish time year-round (IST=UTC+1 summer, GMT=UTC winter)
-    # The script's broadcast window check filters slots outside 09:00-23:00 UTC
     - cron: '45 8-21 * * *'
 
   workflow_dispatch:
@@ -13,11 +12,6 @@ on:
         description: 'Target datetime in Irish time (YYYY-MM-DD HH:MM:SS) - defaults to current Irish time'
         required: false
         type: string
-      dry_run:
-        description: 'Dry run mode (only print, do not create/delete shows)'
-        required: false
-        type: boolean
-        default: false
 
 concurrency:
   group: check-slot
@@ -58,7 +52,6 @@ jobs:
           if [ -n "${{ inputs.target_datetime }}" ]; then
             TARGET_DATETIME="${{ inputs.target_datetime }}"
           else
-            # Get current time in Irish timezone (Europe/Dublin)
             TARGET_DATETIME=$(TZ='Europe/Dublin' date +"%Y-%m-%d %H:%M:%S")
           fi
           echo "target_datetime=$TARGET_DATETIME" >> $GITHUB_OUTPUT
@@ -66,13 +59,7 @@ jobs:
 
       - name: Check and fix slot
         run: |
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
-            echo "Running in DRY RUN mode"
-            python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless --dry-run
-          else
-            echo "Running in LIVE mode"
-            python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless
-          fi
+          python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless
 
       - name: Upload error screenshots
         if: failure()
@@ -88,13 +75,7 @@ jobs:
           echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Target datetime (Irish time):** ${{ steps.datetime.outputs.target_datetime }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
-            echo "**Mode:** DRY RUN" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ job.status }}" == "success" ]; then
