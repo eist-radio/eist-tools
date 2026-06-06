@@ -1130,6 +1130,10 @@ def mode_check_slot(
         print(f"\n✓ Slot at {slot_start.strftime('%H:%M')} UTC is outside broadcast hours (09:00-23:00). No action needed.")
         return
 
+    # Authenticate early so we can validate track IDs via the media API
+    if not scheduler.authenticated:
+        scheduler.authenticate_with_playwright()
+
     # Fetch schedule with a small buffer around the slot
     fetch_start = slot_start - timedelta(minutes=10)
     fetch_end = slot_end + timedelta(minutes=10)
@@ -1174,13 +1178,20 @@ def mode_check_slot(
                 print(f"    → Live show. No action needed.")
             elif media_type == "playlist":
                 print(f"    → Playlist show. No action needed.")
-            elif media_type == "mix" and track_id:
-                print(f"    → Pre-record with file attached. No action needed.")
             elif media_type == "mix" and not track_id:
                 print(f"    → ⚠ Pre-record WITHOUT file! Needs replacement.")
                 action = "replace"
                 broken_show = show
                 break
+            elif media_type == "mix" and track_id:
+                track_data = scheduler.fetch_track_details(track_id)
+                if track_data and track_data.get("tracks"):
+                    print(f"    → Pre-record with valid file. No action needed.")
+                else:
+                    print(f"    → ⚠ Pre-record with DELETED file (trackId exists but file gone)! Needs replacement.")
+                    action = "replace"
+                    broken_show = show
+                    break
             else:
                 print(f"    → Unknown media type '{media_type}'. Skipping.")
 
