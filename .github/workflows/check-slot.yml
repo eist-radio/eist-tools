@@ -2,13 +2,15 @@ name: Check and fix schedule slots
 
 on:
   schedule:
-    # Run at :45 past every hour from 08:45-23:45 UTC
-    - cron: '45 8-23 * * *'
+    # Run at :45 past every hour, 08:45-21:45 UTC
+    # Covers 9am-11pm Irish time year-round (IST=UTC+1 summer, GMT=UTC winter)
+    # The script's broadcast window check filters slots outside 09:00-23:00 UTC
+    - cron: '45 8-21 * * *'
 
   workflow_dispatch:
     inputs:
       target_datetime:
-        description: 'Target datetime (YYYY-MM-DD HH:MM:SS UTC) - defaults to current time'
+        description: 'Target datetime in Irish time (YYYY-MM-DD HH:MM:SS) - defaults to current Irish time'
         required: false
         type: string
       dry_run:
@@ -56,10 +58,11 @@ jobs:
           if [ -n "${{ inputs.target_datetime }}" ]; then
             TARGET_DATETIME="${{ inputs.target_datetime }}"
           else
-            TARGET_DATETIME=$(date -u +"%Y-%m-%d %H:%M:%S")
+            # Get current time in Irish timezone (Europe/Dublin)
+            TARGET_DATETIME=$(TZ='Europe/Dublin' date +"%Y-%m-%d %H:%M:%S")
           fi
           echo "target_datetime=$TARGET_DATETIME" >> $GITHUB_OUTPUT
-          echo "Target datetime: $TARGET_DATETIME"
+          echo "Target datetime (Irish time): $TARGET_DATETIME"
 
       - name: Check and fix slot
         run: |
@@ -83,7 +86,7 @@ jobs:
         run: |
           echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Target datetime:** ${{ steps.datetime.outputs.target_datetime }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target datetime (Irish time):** ${{ steps.datetime.outputs.target_datetime }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ inputs.dry_run }}" == "true" ]; then

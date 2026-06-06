@@ -1,0 +1,30 @@
+name: Keepalive
+
+# GitHub disables scheduled workflows after 60 days of repo inactivity.
+# This job creates a dummy commit every 4 weeks to keep the repo active.
+
+on:
+  schedule:
+    - cron: '17 3 1 * *'  # 1st of every month at 03:17 UTC
+
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create keepalive commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          date -u > .github/.keepalive
+          git add .github/.keepalive
+          git commit -m "chore: keepalive commit to prevent scheduled workflow disablement"
+          git push
