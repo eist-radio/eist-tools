@@ -2,8 +2,6 @@
 
 Automation tools for éist radio on radiocult: replay show scheduling and media archival.
 
-See [flow.md](flow.md) for details.
-
 ## Setup
 
 ### Installation
@@ -81,10 +79,10 @@ python scripts/add-eist-aris-shows.py "2025-12-08" --execute
 
 ### Hourly Slot Check
 
-Checks if the next hour has an empty slot or a pre-record show without a file attached. If so, picks a random eligible show from the last 4 weeks and creates it as an éist arís replay.
+Checks if the next hour has an empty slot or a pre-record show without a file attached (including recurring events). If so, deletes the broken show (if any), picks a random eligible show from the last 4 weeks, and creates it as an éist arís replay via the RadioCult API — including the original artist.
 
 ```bash
-# Check the next hour from a specific time (dry run)
+# Check the next hour from a specific Irish time (dry run)
 python scripts/add-eist-aris-shows.py "2026-06-05 14:45:00" --check-slot --dry-run
 
 # Check and auto-fix (live)
@@ -94,7 +92,7 @@ python scripts/add-eist-aris-shows.py "2026-06-05 14:45:00" --check-slot
 python scripts/add-eist-aris-shows.py "2026-06-05 14:45:00" --check-slot --headless
 ```
 
-The input time is rounded up to the next full hour. Only 1hr shows are used as replacements.
+The input time is in Irish time (Europe/Dublin) and is rounded up to the next full hour. Only 1hr shows are used as replacements. Shows already scheduled in the same week are excluded to avoid duplicates.
 
 ### Command-line Options
 
@@ -251,8 +249,12 @@ After a workflow run:
 
 The `.github/workflows/check-slot.yml` workflow runs automatically:
 
-- **Schedule**: Every hour at :45 past (08:45-23:45 UTC)
+- **Schedule**: Every hour at :45 past, 08:45-21:45 UTC (covers 9am-11pm Irish time year-round)
 - **Action**: Checks the next hour's slot and auto-fixes if empty or has a fileless pre-record
 - **Mode**: LIVE (creates/deletes shows as needed)
 
-You can trigger it manually from Actions → Check and fix schedule slots with an optional target datetime and dry-run flag.
+You can trigger it manually from Actions → Check and fix schedule slots with an optional target datetime (Irish time) and dry-run flag.
+
+### Keepalive (GitHub Actions)
+
+The `.github/workflows/keepalive.yml` workflow creates a dummy commit on the 1st of each month to prevent GitHub from disabling the scheduled workflows after 60 days of repo inactivity.
