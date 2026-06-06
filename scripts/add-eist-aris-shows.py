@@ -828,8 +828,8 @@ def mode_test_slots(scheduler: EistArisScheduler, args, target_date: datetime):
     for slot in empty_slots:
         slots_json.append(
             {
-                "start": slot["start"].strftime("%Y-%m-%d %H:%M"),
-                "end": slot["end"].strftime("%Y-%m-%d %H:%M"),
+                "start": slot["start"].strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "end": slot["end"].strftime("%Y-%m-%dT%H:%M:%S+00:00"),
                 "duration_minutes": slot["duration_minutes"],
                 "scheduled_duration": slot.get("scheduled_duration"),
                 "day_of_week": slot["start"].strftime("%A"),

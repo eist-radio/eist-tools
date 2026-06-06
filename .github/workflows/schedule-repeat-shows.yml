@@ -5,18 +5,12 @@ on:
     # Run at 11:00 PM UTC every Saturday
     - cron: '0 23 * * 6'
 
-  # Allow manual triggering for testing
   workflow_dispatch:
     inputs:
       target_date:
         description: 'Target date (YYYY-MM-DD) - defaults to next Monday'
         required: false
         type: string
-      dry_run:
-        description: 'Dry run mode (only print, do not create shows)'
-        required: false
-        type: boolean
-        default: true
 
 jobs:
   schedule-shows:
@@ -57,7 +51,7 @@ jobs:
             TARGET_DATE=$(date -d "next Monday" +%Y-%m-%d)
           fi
           echo "target_date=$TARGET_DATE" >> $GITHUB_OUTPUT
-          echo "📅 Target date: $TARGET_DATE"
+          echo "Target date: $TARGET_DATE"
 
       - name: Step 1 - Generate schedule.json
         run: |
@@ -85,15 +79,8 @@ jobs:
 
       - name: Step 5 - Execute plan (create shows)
         run: |
-          echo "::group::Creating shows via Playwright"
-          # Use --dry-run for scheduled runs, or respect manual input
-          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ inputs.dry_run }}" == "true" ]; then
-            echo "Running in DRY RUN mode - no shows will be created"
-            python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --execute --headless --dry-run
-          else
-            echo "Running in LIVE mode - shows will be created"
-            python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --execute --headless
-          fi
+          echo "::group::Creating shows via API"
+          python scripts/add-eist-aris-shows.py ${{ steps.date.outputs.target_date }} --execute --headless
           echo "::endgroup::"
 
       - name: Upload artifacts (on success)
@@ -124,17 +111,10 @@ jobs:
       - name: Display summary
         if: always()
         run: |
-          echo "## 📊 Show Scheduling Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Show Scheduling Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Target Week:** ${{ steps.date.outputs.target_date }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Determine if dry run
-          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ inputs.dry_run }}" == "true" ]; then
-            echo "**Mode:** 🔍 DRY RUN (no changes made)" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Mode:** ✨ LIVE (shows created)" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -f updated-slots.json ]; then
@@ -143,14 +123,10 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
 
             if [ "${{ job.status }}" == "success" ]; then
-              if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ inputs.dry_run }}" == "true" ]; then
-                echo "✅ **Status:** Dry run completed successfully - $SHOW_COUNT shows would be created" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "✅ **Status:** All shows created successfully" >> $GITHUB_STEP_SUMMARY
-              fi
+              echo "**Status:** All shows created successfully" >> $GITHUB_STEP_SUMMARY
             else
-              echo "❌ **Status:** Failed - check logs and error screenshots" >> $GITHUB_STEP_SUMMARY
+              echo "**Status:** Failed - check logs and error screenshots" >> $GITHUB_STEP_SUMMARY
             fi
           else
-            echo "⚠️ **No shows planned** - schedule may be full or no eligible shows found" >> $GITHUB_STEP_SUMMARY
+            echo "**No shows planned** - schedule may be full or no eligible shows found" >> $GITHUB_STEP_SUMMARY
           fi
