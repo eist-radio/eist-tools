@@ -3,5 +3,6 @@ __pycache__/
 *.json
 error_screenshot_*.png
 error-screenshot.png
+debug_*.png
 cold-storage-tmp/
 archive-tmp/

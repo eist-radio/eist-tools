@@ -18,6 +18,7 @@ import re
 import sys
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 
 import requests
@@ -546,272 +547,83 @@ class EistArisScheduler:
             pass
 
     def create_show_from_mapping(self, page, mapping: Dict) -> None:
-        """Create a single show via Playwright from a slot/show mapping."""
+        """Create a show via the RadioCult API.
+
+        Uses a direct POST to the schedule API from the browser context
+        (which carries session cookies for authentication).
+        """
         slot = mapping["slot"]
         show = mapping["show"]
 
-        start_time = datetime.fromisoformat(slot["start"].replace("Z", "+00:00"))
+        raw_start = slot["start"]
+        start_time = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
         scheduled_duration = slot["scheduled_duration"]
         end_time = start_time + timedelta(minutes=scheduled_duration)
 
-        start_date = start_time.strftime("%Y-%m-%d")
-        start_time_str = start_time.strftime("%H:%M")
-        end_time_str = end_time.strftime("%H:%M")
-        day_of_week = start_time.strftime("%A")
+        irish_tz = ZoneInfo("Europe/Dublin")
+        start_local = start_time.astimezone(irish_tz)
+
+        show_title = f"{show['title']} (éist arís)"
 
         print("\n" + "=" * 60)
-        print(f"Creating: {show['title']} (éist arís)")
-        print(f"When: {day_of_week}, {start_date}")
-        print(f"Time: {start_time_str} - {end_time_str} UTC ({scheduled_duration}min)")
+        print(f"Creating: {show_title}")
+        print(f"When: {start_local.strftime('%A')}, {start_local.strftime('%Y-%m-%d')}")
+        print(f"Time: {start_local.strftime('%H:%M')} - "
+              f"{end_time.astimezone(irish_tz).strftime('%H:%M')} IST "
+              f"({scheduled_duration}min)")
+        print(f"  (= {start_time.strftime('%H:%M')} - "
+              f"{end_time.strftime('%H:%M')} UTC)")
         print("=" * 60)
 
-        week_start = start_time - timedelta(days=start_time.weekday())
-        week_str = week_start.strftime("%Y-%m-%d")
-        page.goto(f"{WEB_BASE_URL}/schedule?w={week_str}")
-        page.wait_for_load_state("networkidle", timeout=15_000)
+        track_id = show.get("track_id", "")
+        media_payload: Dict = {"type": "mix"}
+        if track_id:
+            media_payload["trackId"] = track_id
+            media_payload["onMediaEnd"] = {"type": "underrun"}
+            media_payload["overrun"] = {"maxOverrunDuration": 300, "enabled": True}
 
-        # 1. Open create modal
-        print("\n[1] Opening create modal...")
-        try:
-            # Try primary selector
-            create_btn = page.locator(
-                'button:has(svg[viewBox="0 0 256 256"]):has-text("Create")'
-            )
-            create_btn.wait_for(timeout=5_000)
-            create_btn.click()
-        except Exception:
-            raise Exception("Could not find Create button with any selector")
+        artist_ids = show.get("artist_ids") or []
 
-        page.wait_for_timeout(1_000)
-        print("  ✓ Modal opened")
+        create_payload: Dict = {
+            "title": show_title,
+            "startDateUtc": start_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "endDateUtc": end_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "duration": scheduled_duration,
+            "timezone": "Europe/Dublin",
+            "isRecurring": False,
+            "doRecord": False,
+            "media": media_payload,
+        }
+        if artist_ids:
+            create_payload["artistIds"] = artist_ids
+            print(f"  Artist IDs: {artist_ids}")
 
-        # 2. Start date (set BEFORE time to avoid false conflict checks)
-        start_day = start_time.day
-        print(f"\n[2] Setting start date to {start_date}...")
-        try:
-            date_input = page.locator('input[id^="startDate"]')
-            date_input.click()
-            page.wait_for_timeout(500)
+        api_result = page.evaluate("""async (payload) => {
+            try {
+                const resp = await fetch(
+                    'https://api.radiocult.fm/api/station/eist-radio/schedule',
+                    {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        credentials: 'include',
+                        mode: 'cors',
+                        body: JSON.stringify(payload),
+                    }
+                );
+                const body = await resp.text();
+                return {status: resp.status, body: body.substring(0, 500), ok: resp.ok};
+            } catch (e) {
+                return {error: e.message};
+            }
+        }""", create_payload)
 
-            date_button = page.locator(
-                f'button[role="gridcell"]:has-text("{start_day}"):not([data-sibling])'
-            )
-            matching_buttons = date_button.all()
-            clicked = False
+        if api_result.get("ok"):
+            print("  ✓ Event created via API")
+            return
 
-            for btn in matching_buttons:
-                if btn.inner_text().strip() == str(start_day):
-                    btn.click()
-                    clicked = True
-                    break
-
-            if not clicked and matching_buttons:
-                date_button.first.click()
-
-            print(f"  ✓ Start date selected (day {start_day})")
-            page.wait_for_timeout(1_000)
-        except Exception as exc:
-            print(f"  ✗ Could not select start date: {exc}")
-
-        # 3. End date (same day as start)
-        end_day = start_day
-        print(f"\n[3] Setting end date to same day (day {end_day})...")
-
-        try:
-            end_input = page.locator('input[id^="endDate"]')
-            if end_input.count() > 0:
-                end_input.click()
-                page.wait_for_timeout(500)
-
-                date_button = page.locator(
-                    f'button[role="gridcell"]:has-text("{end_day}"):not([data-sibling])'
-                )
-                matching_buttons = date_button.all()
-                clicked = False
-
-                for btn in matching_buttons:
-                    if btn.inner_text().strip() == str(end_day):
-                        btn.click()
-                        clicked = True
-                        break
-
-                if not clicked and matching_buttons:
-                    date_button.first.click()
-
-                print(f"  ✓ End date selected (day {end_day})")
-                page.wait_for_timeout(1_000)
-            else:
-                print("  ℹ End date selector not present, skipping")
-        except Exception as exc:
-            print(f"  ✗ Could not select end date: {exc}")
-
-        # 4. Start time (react-aria spinbutton inputs)
-        print(f"\n[4] Setting start time to {start_time_str}...")
-        start_h, start_m = start_time_str.split(":")
-        time_groups = page.locator('div[role="group"][aria-label="Time"]')
-        start_group = time_groups.nth(0)
-        hour_spin = start_group.locator('div[data-type="hour"]')
-        hour_spin.click()
-        page.wait_for_timeout(200)
-        page.keyboard.press("Control+a")
-        page.keyboard.type(start_h, delay=100)
-        page.wait_for_timeout(300)
-        minute_spin = start_group.locator('div[data-type="minute"]')
-        minute_spin.click()
-        page.wait_for_timeout(200)
-        page.keyboard.press("Control+a")
-        page.keyboard.type(start_m, delay=100)
-        page.wait_for_timeout(300)
-        print("  ✓ Start time set")
-
-        # 5. End time (react-aria spinbutton inputs)
-        print(f"\n[5] Setting end time to {end_time_str}...")
-        end_h, end_m = end_time_str.split(":")
-        end_group = time_groups.nth(1)
-        end_hour_spin = end_group.locator('div[data-type="hour"]')
-        end_hour_spin.click()
-        page.wait_for_timeout(200)
-        page.keyboard.press("Control+a")
-        page.keyboard.type(end_h, delay=100)
-        page.wait_for_timeout(300)
-        end_minute_spin = end_group.locator('div[data-type="minute"]')
-        end_minute_spin.click()
-        page.wait_for_timeout(200)
-        page.keyboard.press("Control+a")
-        page.keyboard.type(end_m, delay=100)
-        page.wait_for_timeout(300)
-        print("  ✓ End time set")
-
-        # 6. Title
-        show_title = f"{show['title']} (éist arís)"
-        print(f"\n[6] Setting title: {show_title}")
-        title_input = page.locator('input[name="title"]')
-        title_input.fill(show_title)
-        page.wait_for_timeout(100)
-        print("  ✓ Title filled")
-
-        # 7. Description
-        print("\n[7] Setting description...")
-        description = show.get("description", "")
-
-        if description and isinstance(description, dict):
-            text_parts: List[str] = []
-            try:
-                for block in description.get("content", []):
-                    if isinstance(block, dict) and block.get("type") == "paragraph":
-                        for node in block.get("content", []):
-                            if isinstance(node, dict) and node.get("type") == "text":
-                                text_parts.append(node.get("text", ""))
-                description = " ".join(text_parts)
-            except Exception:
-                description = "Éist arís replay show."
-
-        if not description or not isinstance(description, str):
-            description = "Éist arís replay show."
-
-        desc_field = page.locator(
-            'p[data-placeholder*="Enter event description"]'
-        )
-        desc_field.click()
-        page.wait_for_timeout(100)
-        page.keyboard.type(description)
-        page.wait_for_timeout(200)
-        print("  ✓ Description filled")
-
-        # 8. Artist
-        artist_name = show.get("artist_name") or show.get("track_artist") or ""
-        if artist_name:
-            print(f"\n[8] Adding artist: {artist_name}")
-            try:
-                artist_input = page.locator("input#artist-select")
-                artist_input.click()
-                page.wait_for_timeout(100)
-                page.keyboard.type(artist_name)
-                page.wait_for_timeout(500)
-                page.keyboard.press("Enter")
-                page.wait_for_timeout(300)
-                print("  ✓ Artist added")
-            except Exception as exc:
-                print(f"  ✗ Could not add artist: {exc}")
-        else:
-            print("\n[8] No artist available - skipping")
-
-        # 9. Pre-record mode
-        print("\n[9] Enabling pre-record mode...")
-        prerecord_button = page.get_by_role("button", name="Mix Pre-record")
-        prerecord_button.click()
-        page.wait_for_timeout(500)
-        print("  ✓ Pre-record enabled")
-
-        # 10. Open media selection
-        print("\n[10] Opening media selector...")
-        media_button = page.locator("text=Select media").first
-        media_button.click()
-        page.wait_for_timeout(1_000)
-        print("  ✓ Media selector opened")
-
-        # 11. Search track
-        track_title = show.get("track_title") or show.get("title", "")
-        if not show.get("track_title"):
-            print("  ! No track_title, falling back to show title")
-
-        print(f"\n[11] Searching for track: {track_title}")
-        search_input = page.locator(
-            'input[data-ds--text-field--input="true"]'
-        ).last
-        search_input.fill(track_title)
-        page.wait_for_timeout(1_000)
-        print("  ✓ Search completed")
-
-        # 12. Select track (click first search result in media table)
-        print("\n[12] Selecting track from results...")
-        try:
-            # Media results table has an "Album" column (unique vs calendar tables)
-            media_table = page.locator('table:has(th:has-text("Album"))')
-            result_rows = media_table.locator("tr").filter(
-                has=page.locator("td")
-            )
-            row_count = result_rows.count()
-            if row_count == 0:
-                raise Exception(
-                    f"No media found matching '{track_title}'"
-                )
-            result_rows.first.click()
-            page.wait_for_timeout(500)
-            print(f"  ✓ Track selected (from {row_count} result(s))")
-        except Exception as exc:
-            print(f"  ! Could not select track: {exc}")
-            raise Exception(f"Failed to select track '{track_title}'") from exc
-
-        # 13. Create event
-        print("\n[13] Creating event...")
-        create_button = page.locator(
-            'button[type="submit"]:has-text("Create event")'
-        )
-        create_button.click()
-        page.wait_for_timeout(3_000)
-
-        # Check for conflict error dialog
-        conflict = page.locator('text="This event conflicts with another"')
-        if conflict.count() > 0:
-            close_btn = page.locator('button:has-text("Close")')
-            if close_btn.count() > 0:
-                close_btn.first.click()
-                page.wait_for_timeout(500)
-            raise Exception("Event conflicts with an existing show in this time slot")
-
-        # Verify modal closed (indicates success)
-        create_still_visible = page.locator(
-            'button[type="submit"]:has-text("Create event")'
-        ).count()
-        if create_still_visible > 0:
-            raise Exception("Create event form still open — submission may have failed")
-
-        print("  ✓ Event created")
-
-        print("\n" + "=" * 60)
-        print(f"SUCCESS! Created '{show_title}'")
-        print("=" * 60 + "\n")
+        raise Exception(f"API creation failed: {api_result}")
 
     def delete_show_via_playwright(self, page, show_title: str, slot_start: datetime) -> None:
         """Delete an existing show from the schedule via Playwright."""
@@ -841,25 +653,51 @@ class EistArisScheduler:
             page.wait_for_timeout(1_000)
             print("  ✓ Delete button clicked")
         except Exception:
-            # Try alternative: look for a trash icon button
             delete_btn = page.locator('[aria-label*="delete" i], [aria-label*="remove" i]').first
             delete_btn.click()
             page.wait_for_timeout(1_000)
             print("  ✓ Delete button clicked (alt selector)")
 
-        # Confirm the deletion dialog
-        print("  Confirming deletion...")
-        try:
-            confirm_btn = page.locator(
-                'button:has-text("Delete"), button:has-text("Confirm"), button:has-text("Yes")'
-            ).last
+        # Handle the deletion dialog (two variants)
+        recurring_dialog = page.locator('text="Delete recurring event"')
+        if recurring_dialog.count() > 0:
+            print("  Recurring event — selecting 'Delete this event'...")
+            radio = page.locator('text="Delete this event"')
+            radio.click()
+            page.wait_for_timeout(300)
+            confirm_btn = page.locator('button:has-text("Delete")').last
             confirm_btn.click()
             page.wait_for_timeout(2_000)
+            print("  ✓ Single instance deleted")
+        else:
+            print("  Confirming deletion...")
+            confirm_btn = page.locator('button:has-text("Delete event")')
+            if confirm_btn.count() > 0:
+                confirm_btn.first.click()
+            else:
+                confirm_btn = page.locator('button:has-text("Delete")').last
+                confirm_btn.click()
+            page.wait_for_timeout(2_000)
             print("  ✓ Deletion confirmed")
-        except Exception as exc:
-            print(f"  ✗ Could not confirm deletion: {exc}")
-            raise
 
+        page.wait_for_load_state("networkidle", timeout=10_000)
+
+        # Navigate away and back to force FullCalendar to fully reload
+        print("  Navigating away to force calendar reload...")
+        page.goto(f"{WEB_BASE_URL}/media")
+        page.wait_for_load_state("networkidle", timeout=10_000)
+        page.wait_for_timeout(2_000)
+
+        page.goto(f"{WEB_BASE_URL}/schedule?w={week_str}")
+        page.wait_for_load_state("networkidle", timeout=15_000)
+        page.wait_for_timeout(3_000)
+        print("  ✓ Calendar reloaded")
+
+        remaining = page.locator(f'text="{show_title}"').count()
+        if remaining > 0:
+            print(f"  ⚠ WARNING: '{show_title}' still visible after reload!")
+        else:
+            print(f"  ✓ Verified: '{show_title}' removed")
         print(f"  ✓ Show '{show_title}' deleted successfully")
 
 
@@ -1339,13 +1177,10 @@ def mode_check_slot(
             elif media_type == "mix" and track_id:
                 print(f"    → Pre-record with file attached. No action needed.")
             elif media_type == "mix" and not track_id:
-                if show.get("isRecurring"):
-                    print(f"    → ⚠ Recurring pre-record WITHOUT file. Skipping (recurring events cannot be auto-replaced).")
-                else:
-                    print(f"    → ⚠ Pre-record WITHOUT file! Needs replacement.")
-                    action = "replace"
-                    broken_show = show
-                    break
+                print(f"    → ⚠ Pre-record WITHOUT file! Needs replacement.")
+                action = "replace"
+                broken_show = show
+                break
             else:
                 print(f"    → Unknown media type '{media_type}'. Skipping.")
 
@@ -1396,8 +1231,8 @@ def mode_check_slot(
 
     # Build the slot and show mapping for create_show_from_mapping()
     slot_data = {
-        "start": slot_start.strftime("%Y-%m-%d %H:%M"),
-        "end": slot_end.strftime("%Y-%m-%d %H:%M"),
+        "start": slot_start.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+        "end": slot_end.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
         "duration_minutes": 60,
         "scheduled_duration": 60,
         "day_of_week": slot_start.strftime("%A"),
@@ -1419,6 +1254,8 @@ def mode_check_slot(
         print(f"  Slot: {slot_data['day_of_week']}, {slot_data['date']}")
         print(f"  Time: {slot_data['start']} - {slot_data['end']}")
         print(f"  Track ID: {replacement.get('track_id', 'N/A')}")
+        if replacement.get("artist_ids"):
+            print(f"  Artist IDs: {replacement['artist_ids']}")
 
         print("\n" + "=" * 80)
         print("DRY RUN COMPLETE")
@@ -1483,6 +1320,9 @@ def mode_check_slot(
                     except Exception:
                         pass
                     raise
+
+            if action == "replace":
+                page.wait_for_timeout(1_000)
 
             # Step 2: Create replacement show
             try:
@@ -1622,10 +1462,13 @@ def main() -> None:
         return
 
     if args.check_slot:
+        irish_tz = ZoneInfo("Europe/Dublin")
+        local_dt = target_date.replace(tzinfo=irish_tz)
+        utc_dt = local_dt.astimezone(timezone.utc).replace(tzinfo=None)
         mode_check_slot(
             scheduler,
             args,
-            target_date,
+            utc_dt,
             login_username,
             login_password,
             args.headless,
