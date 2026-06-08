@@ -245,15 +245,30 @@ After a workflow run:
 2. Download artifacts to see JSON files
 3. Review logs for detailed output
 
-### Hourly Slot Check (GitHub Actions)
+### Hourly Slot Check (GitHub Actions + Cloudflare Worker)
 
-The `.github/workflows/check-slot.yml` workflow runs automatically:
+The `.github/workflows/check-slot.yml` workflow checks the next hour's slot and auto-fixes if empty or has a fileless pre-record (LIVE mode — creates/deletes shows as needed).
 
-- **Schedule**: Every hour at :45 past, 08:45-21:45 UTC (covers 9am-11pm Irish time year-round)
-- **Action**: Checks the next hour's slot and auto-fixes if empty or has a fileless pre-record
-- **Mode**: LIVE (creates/deletes shows as needed)
+**Scheduling:** A Cloudflare Worker (`cloudflare-worker/`) dispatches the workflow every 30 minutes during broadcast hours (`:30` past each hour, 08:30–22:30 UTC). GitHub Actions cron runs hourly at `:07` past as a fallback. If a successful run already occurred in the last hour, the duplicate self-cancels.
 
-You can trigger it manually from Actions → Check and fix schedule slots with an optional target datetime (Irish time) and dry-run flag.
+You can also trigger it manually from Actions → Check and fix schedule slots with an optional target datetime (Irish time).
+
+#### Cloudflare Worker setup
+
+The worker calls the GitHub API `workflow_dispatch` endpoint to trigger the check-slot workflow.
+
+```bash
+cd cloudflare-worker
+npm install
+
+# Set the GitHub token (fine-grained PAT with Actions:write on eist-radio/eist-tools)
+npx wrangler secret put GITHUB_TOKEN
+
+# Deploy
+npx wrangler deploy
+
+# For local dev, create .dev.vars with: GITHUB_TOKEN=ghp_your_token_here
+```
 
 ### Keepalive (GitHub Actions)
 
