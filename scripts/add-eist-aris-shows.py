@@ -16,6 +16,7 @@ import os
 import random
 import re
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -88,20 +89,8 @@ class EistArisScheduler:
     # API helpers
     # -------------------------------------------------------------------------
 
-    def authenticate_with_playwright(self) -> None:
-        """Log in with Playwright and copy cookies into the requests session."""
-        if self.authenticated:
-            return
-
-        if not self.login_username or not self.login_password:
-            print(
-                "Warning: Cannot authenticate - credentials not set",
-                file=sys.stderr,
-            )
-            return
-
-        print("Authenticating with Playwright to get session cookies...")
-
+    def _try_playwright_login(self) -> bool:
+        """Attempt a single Playwright login. Returns True on success."""
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context()
@@ -120,8 +109,7 @@ class EistArisScheduler:
                 if "/login" in page.url:
                     print("Warning: Still on login page after submit — login may have failed",
                           file=sys.stderr)
-                    browser.close()
-                    return
+                    return False
 
                 for cookie in context.cookies():
                     self.session.cookies.set(
@@ -137,15 +125,37 @@ class EistArisScheduler:
 
                 if resp.status_code == 401:
                     print("Authentication failed - API returned 401", file=sys.stderr)
-                    browser.close()
-                    return
+                    return False
 
                 self.authenticated = True
                 print("Authentication successful!")
+                return True
             except Exception as exc:
                 print(f"Authentication error: {exc}", file=sys.stderr)
+                return False
             finally:
                 browser.close()
+
+    def authenticate_with_playwright(self, max_retries: int = 3) -> None:
+        """Log in with Playwright and copy cookies into the requests session."""
+        if self.authenticated:
+            return
+
+        if not self.login_username or not self.login_password:
+            print(
+                "Warning: Cannot authenticate - credentials not set",
+                file=sys.stderr,
+            )
+            return
+
+        for attempt in range(1, max_retries + 1):
+            print(f"Authenticating with Playwright (attempt {attempt}/{max_retries})...")
+            if self._try_playwright_login():
+                return
+            if attempt < max_retries:
+                delay = attempt * 5
+                print(f"Retrying in {delay}s...", file=sys.stderr)
+                time.sleep(delay)
 
     def fetch_schedule(self, start_date: datetime, end_date: datetime) -> List[Dict]:
         """Fetch schedule items in a date range."""

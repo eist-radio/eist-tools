@@ -14,6 +14,10 @@ on:
         required: false
         type: string
 
+permissions:
+  actions: write
+  contents: read
+
 concurrency:
   group: check-slot
   cancel-in-progress: false
@@ -37,39 +41,39 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --workflow "check-slot.yml" \
             --status success \
-            --created ">$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)" \
+            --created ">$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)" \
             --json databaseId \
             --jq 'map(select(.databaseId != '"$GITHUB_RUN_ID"')) | length')
           if [ "$RECENT" -gt 0 ]; then
             echo "Skipping — $RECENT successful run(s) in the last hour."
-            echo "SKIP_RUN=true" >> $GITHUB_ENV
+            # Cancel this run so it shows as "cancelled" not "success".
+            # Without this, skipped runs count as successes, causing every
+            # subsequent run to also skip (infinite skip chain).
+            gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+            sleep 60
+            exit 1
           fi
 
       - name: Checkout repository
-        if: env.SKIP_RUN != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
-        if: env.SKIP_RUN != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
       - name: Install Python dependencies
-        if: env.SKIP_RUN != 'true'
         run: |
           pip install --upgrade pip
           pip install requests python-dotenv playwright
 
       - name: Install Playwright browsers
-        if: env.SKIP_RUN != 'true'
         run: |
           playwright install chromium
           playwright install-deps chromium
 
       - name: Calculate target datetime
-        if: env.SKIP_RUN != 'true'
         id: datetime
         run: |
           if [ -n "${{ inputs.target_datetime }}" ]; then
@@ -81,12 +85,11 @@ jobs:
           echo "Target datetime (Irish time): $TARGET_DATETIME"
 
       - name: Check and fix slot
-        if: env.SKIP_RUN != 'true'
         run: |
           python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless
 
       - name: Upload error screenshots
-        if: failure() && env.SKIP_RUN != 'true'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: check-slot-errors-${{ github.run_number }}
@@ -96,19 +99,13 @@ jobs:
       - name: Display summary
         if: always()
         run: |
-          if [ "${{ env.SKIP_RUN }}" == "true" ]; then
-            echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Status:** Skipped — successful run already completed in the last hour" >> $GITHUB_STEP_SUMMARY
+          echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target datetime (Irish time):** ${{ steps.datetime.outputs.target_datetime }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "**Status:** Completed successfully" >> $GITHUB_STEP_SUMMARY
           else
-            echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Target datetime (Irish time):** ${{ steps.datetime.outputs.target_datetime }}" >> $GITHUB_STEP_SUMMARY
-            echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            if [ "${{ job.status }}" == "success" ]; then
-              echo "**Status:** Completed successfully" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "**Status:** Failed - check logs and error screenshots" >> $GITHUB_STEP_SUMMARY
-            fi
+            echo "**Status:** Failed - check logs and error screenshots" >> $GITHUB_STEP_SUMMARY
           fi
