@@ -112,22 +112,19 @@ jobs:
         run: |
           if [ "${{ steps.check.outputs.fixed }}" == "true" ]; then
             COLOR=3066993
-            TITLE="Check Slot — Fixed"
             REMOVED="${{ steps.check.outputs.removed }}"
             CREATED="${{ steps.check.outputs.created }}"
-            DESC="**${{ steps.datetime.outputs.target_datetime }}** (Irish time)"
+            DESC="🥄 **Wooden spoon applied!**\n${{ steps.datetime.outputs.target_datetime }} (Irish time)"
             if [ -n "$REMOVED" ]; then
               DESC="$DESC\n🗑 Removed: $REMOVED"
             fi
-            DESC="$DESC\n🎵 Added: $CREATED\n[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            DESC="$DESC\n🎵 Added: $CREATED"
           else
             COLOR=15158332
-            TITLE="Check Slot — Failed"
-            DESC="Schedule check failed for **${{ steps.datetime.outputs.target_datetime }}** (Irish time). [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            DESC="❌ **Check slot failed**\n${{ steps.datetime.outputs.target_datetime }} (Irish time)\n[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           fi
           curl -sf -H "Content-Type: application/json" -d "{
             \"embeds\": [{
-              \"title\": \"$TITLE\",
               \"description\": \"$DESC\",
               \"color\": $COLOR
             }]
