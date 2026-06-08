@@ -1301,8 +1301,19 @@ def mode_check_slot(
         print("\n⚠ No eligible shows with valid track files. Exiting.")
         return
 
-    # Pick a random replacement
-    replacement = random.choice(eligible_1hr)
+    # Prefer a show by the same artist, fall back to random
+    replacement = None
+    if broken_show:
+        original_artist_ids = set(broken_show.get("artistIds") or [])
+        if original_artist_ids:
+            same_artist = [s for s in eligible_1hr if original_artist_ids & set(s.get("artist_ids") or [])]
+            if same_artist:
+                replacement = random.choice(same_artist)
+                print(f"\nFound {len(same_artist)} show(s) by the same artist — picking one.")
+
+    if not replacement:
+        replacement = random.choice(eligible_1hr)
+
     print(f"\nSelected replacement: '{replacement['title']}'")
     print(f"  Track ID: {replacement.get('track_id')}")
     print(f"  Duration: {replacement.get('duration')} min")
