@@ -95,6 +95,28 @@ jobs:
           path: error_screenshot_*.png
           retention-days: 7
 
+      - name: Notify Discord
+        if: always() && env.DISCORD_WEBHOOK != ''
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            COLOR=3066993
+            TITLE="Check Slot — OK"
+            DESC="Schedule checked for **${{ steps.datetime.outputs.target_datetime }}** (Irish time). No issues or fix applied."
+          else
+            COLOR=15158332
+            TITLE="Check Slot — Failed"
+            DESC="Schedule check failed for **${{ steps.datetime.outputs.target_datetime }}** (Irish time). [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          fi
+          curl -sf -H "Content-Type: application/json" -d "{
+            \"embeds\": [{
+              \"title\": \"$TITLE\",
+              \"description\": \"$DESC\",
+              \"color\": $COLOR
+            }]
+          }" "$DISCORD_WEBHOOK"
+
       - name: Display summary
         if: always()
         run: |
