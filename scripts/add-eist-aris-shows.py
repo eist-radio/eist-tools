@@ -1222,9 +1222,10 @@ def mode_check_slot(
                     if not scheduler.authenticated:
                         scheduler.authenticate_with_playwright()
                     if not scheduler.authenticated:
-                        print(f"    → ✗ Auth failed — cannot validate track file.", file=sys.stderr)
-                        print(f"      Aborting to avoid replacing a valid show.", file=sys.stderr)
-                        sys.exit(1)
+                        # Can't validate, but show has a trackId — assume valid
+                        # rather than risking replacing a good show
+                        print(f"    → ⚠ Cannot validate track (auth unavailable). Assuming valid.")
+                        continue
                     track_data = scheduler.fetch_track_details(track_id)
                 if track_data and track_data.get("tracks"):
                     print(f"    → Pre-record with valid file. No action needed.")
