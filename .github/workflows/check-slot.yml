@@ -2,10 +2,10 @@ name: Check and fix schedule slots
 
 on:
   schedule:
-    # Run at :30 past every hour, 08:30-21:30 UTC
-    # Gives GitHub's scheduler ~30min of slack to fire before the target hour
+    # Run every 10 minutes during broadcast hours (08:00-22:59 UTC)
     # Covers 9am-11pm Irish time year-round (IST=UTC+1 summer, GMT=UTC winter)
-    - cron: '30 8-21 * * *'
+    # Early exit if a successful run already happened in the last hour
+    - cron: '*/10 8-22 * * *'
 
   workflow_dispatch:
     inputs:
@@ -28,26 +28,48 @@ jobs:
       RADIOCULT_PW: ${{ secrets.RADIOCULT_PW }}
 
     steps:
+      - name: Skip if a successful run occurred in the last hour
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RECENT=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow "check-slot.yml" \
+            --status success \
+            --created ">$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)" \
+            --json databaseId \
+            --jq 'map(select(.databaseId != '"$GITHUB_RUN_ID"')) | length')
+          if [ "$RECENT" -gt 0 ]; then
+            echo "Skipping — $RECENT successful run(s) in the last hour."
+            echo "SKIP_RUN=true" >> $GITHUB_ENV
+          fi
+
       - name: Checkout repository
+        if: env.SKIP_RUN != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: env.SKIP_RUN != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
       - name: Install Python dependencies
+        if: env.SKIP_RUN != 'true'
         run: |
           pip install --upgrade pip
           pip install requests python-dotenv playwright
 
       - name: Install Playwright browsers
+        if: env.SKIP_RUN != 'true'
         run: |
           playwright install chromium
           playwright install-deps chromium
 
       - name: Calculate target datetime
+        if: env.SKIP_RUN != 'true'
         id: datetime
         run: |
           if [ -n "${{ inputs.target_datetime }}" ]; then
@@ -59,11 +81,12 @@ jobs:
           echo "Target datetime (Irish time): $TARGET_DATETIME"
 
       - name: Check and fix slot
+        if: env.SKIP_RUN != 'true'
         run: |
           python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless
 
       - name: Upload error screenshots
-        if: failure()
+        if: failure() && env.SKIP_RUN != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: check-slot-errors-${{ github.run_number }}
@@ -73,14 +96,19 @@ jobs:
       - name: Display summary
         if: always()
         run: |
-          echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Target datetime (Irish time):** ${{ steps.datetime.outputs.target_datetime }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "**Status:** Completed successfully" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ env.SKIP_RUN }}" == "true" ]; then
+            echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Skipped — successful run already completed in the last hour" >> $GITHUB_STEP_SUMMARY
           else
-            echo "**Status:** Failed - check logs and error screenshots" >> $GITHUB_STEP_SUMMARY
+            echo "## Check Slot Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Target datetime (Irish time):** ${{ steps.datetime.outputs.target_datetime }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Mode:** LIVE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ job.status }}" == "success" ]; then
+              echo "**Status:** Completed successfully" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "**Status:** Failed - check logs and error screenshots" >> $GITHUB_STEP_SUMMARY
+            fi
           fi
