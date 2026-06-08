@@ -97,7 +97,7 @@ class EistArisScheduler:
             page = context.new_page()
 
             try:
-                page.goto(f"{WEB_BASE_URL}/login")
+                page.goto(f"{WEB_BASE_URL}/sign-in")
                 page.wait_for_selector("input[type=\"email\"]", timeout=10_000)
 
                 page.fill('input[type="email"]', self.login_username)
@@ -106,7 +106,7 @@ class EistArisScheduler:
                 page.wait_for_load_state("networkidle", timeout=15_000)
                 page.wait_for_timeout(2_000)
 
-                if "/login" in page.url:
+                if "/sign-in" in page.url:
                     print("Warning: Still on login page after submit — login may have failed",
                           file=sys.stderr)
                     return False
@@ -1087,7 +1087,7 @@ def mode_execute(
 
         try:
             print("Logging in...")
-            page.goto(f"{WEB_BASE_URL}/login")
+            page.goto(f"{WEB_BASE_URL}/sign-in")
             page.wait_for_selector('input[type="email"]', timeout=10_000)
             page.fill('input[type="email"]', login_username or "")
             page.fill('input[type="password"]', login_password or "")
@@ -1350,7 +1350,7 @@ def mode_check_slot(
 
         try:
             print("\nLogging in...")
-            page.goto(f"{WEB_BASE_URL}/login")
+            page.goto(f"{WEB_BASE_URL}/sign-in")
             page.wait_for_selector('input[type="email"]', timeout=10_000)
             page.fill('input[type="email"]', login_username or "")
             page.fill('input[type="password"]', login_password or "")
