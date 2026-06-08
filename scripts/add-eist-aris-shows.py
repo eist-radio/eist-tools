@@ -1158,9 +1158,9 @@ def mode_check_slot(
     print(f"\nInput time:  {target_date.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Target slot: {slot_start.strftime('%Y-%m-%d %H:%M')} - {slot_end.strftime('%H:%M')} UTC")
 
-    # Check broadcast window (09:00-23:00 UTC)
-    if slot_start.hour < 9 or slot_start.hour >= 23:
-        print(f"\n✓ Slot at {slot_start.strftime('%H:%M')} UTC is outside broadcast hours (09:00-23:00). No action needed.")
+    # Check broadcast window (08:00-23:00 UTC = 9am-midnight Irish)
+    if slot_start.hour < 8 or slot_start.hour >= 23:
+        print(f"\n✓ Slot at {slot_start.strftime('%H:%M')} UTC is outside broadcast hours (08:00-23:00). No action needed.")
         return
 
     # Fetch schedule first (uses API key only — no Playwright needed)

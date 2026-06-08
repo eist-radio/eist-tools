@@ -2,9 +2,9 @@ name: Check and fix schedule slots
 
 on:
   schedule:
-    # Hourly fallback during broadcast hours (Cloudflare Worker handles */10)
-    # Covers 9am-11pm Irish time year-round (IST=UTC+1 summer, GMT=UTC winter)
-    - cron: '7 8-22 * * *'
+    # Hourly fallback during broadcast hours (Cloudflare Worker is primary)
+    # Covers 9am-midnight Irish time year-round (IST=UTC+1 summer, GMT=UTC winter)
+    - cron: '7 7-22 * * *'
 
   workflow_dispatch:
     inputs:
