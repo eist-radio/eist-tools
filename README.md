@@ -249,7 +249,7 @@ After a workflow run:
 
 The `.github/workflows/check-slot.yml` workflow checks the next hour's slot and auto-fixes if empty or has a fileless pre-record (LIVE mode — creates/deletes shows as needed).
 
-**Scheduling:** A Cloudflare Worker (`cloudflare-worker/`) dispatches the workflow every 30 minutes during broadcast hours (`:30` past each hour, 08:30–22:30 UTC). GitHub Actions cron runs hourly at `:07` past as a fallback. If a successful run already occurred in the last hour, the duplicate self-cancels.
+**Scheduling:** GitHub Actions heavily throttles cron schedules on low-activity repos, so a Cloudflare Worker (`cloudflare-worker/`) dispatches the workflow every 30 minutes during broadcast hours (`:30` past each hour, 08:30–22:30 UTC) for reliable triggering. GitHub Actions cron runs hourly at `:07` past as a fallback. If a successful run already occurred in the last hour, the duplicate self-cancels.
 
 You can also trigger it manually from Actions → Check and fix schedule slots with an optional target datetime (Irish time).
 
