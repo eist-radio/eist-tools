@@ -106,27 +106,16 @@ jobs:
           retention-days: 7
 
       - name: Notify Discord
-        if: (failure() || steps.check.outputs.fixed == 'true') && env.DISCORD_WEBHOOK != ''
+        if: steps.check.outputs.fixed == 'true' && env.DISCORD_WEBHOOK != ''
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
-          if [ "${{ steps.check.outputs.fixed }}" == "true" ]; then
-            COLOR=3066993
-            REMOVED="${{ steps.check.outputs.removed }}"
-            CREATED="${{ steps.check.outputs.created }}"
-            DESC="🥄 **Wooden spoon applied!**\n${{ steps.datetime.outputs.target_datetime }} (Irish time)"
-            if [ -n "$REMOVED" ]; then
-              DESC="$DESC\n🗑 Removed: $REMOVED"
-            fi
-            DESC="$DESC\n🎵 Added: $CREATED"
-          else
-            COLOR=15158332
-            DESC="❌ **Check slot failed**\n${{ steps.datetime.outputs.target_datetime }} (Irish time)\n[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          fi
+          REMOVED="${{ steps.check.outputs.removed }}"
+          DESC="Wooden spoon applied!\n${{ steps.datetime.outputs.target_datetime }} \nReplaced: $REMOVED"
           curl -sf -H "Content-Type: application/json" -d "{
             \"embeds\": [{
               \"description\": \"$DESC\",
-              \"color\": $COLOR
+              \"color\": 3066993
             }]
           }" "$DISCORD_WEBHOOK"
 
