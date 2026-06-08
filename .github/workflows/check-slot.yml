@@ -89,6 +89,10 @@ jobs:
           OUTPUT=$(python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless 2>&1 | tee /dev/stderr)
           if echo "$OUTPUT" | grep -q '✓ SUCCESS: Created'; then
             echo "fixed=true" >> $GITHUB_OUTPUT
+            CREATED=$(echo "$OUTPUT" | grep -oP "✓ SUCCESS: Created '\K[^']+")
+            REMOVED=$(echo "$OUTPUT" | grep -oP "Show '\K[^']+" | head -1)
+            echo "created=$CREATED" >> $GITHUB_OUTPUT
+            echo "removed=$REMOVED" >> $GITHUB_OUTPUT
           else
             echo "fixed=false" >> $GITHUB_OUTPUT
           fi
@@ -109,7 +113,13 @@ jobs:
           if [ "${{ steps.check.outputs.fixed }}" == "true" ]; then
             COLOR=3066993
             TITLE="Check Slot — Fixed"
-            DESC="Filled an empty slot for **${{ steps.datetime.outputs.target_datetime }}** (Irish time). [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            REMOVED="${{ steps.check.outputs.removed }}"
+            CREATED="${{ steps.check.outputs.created }}"
+            DESC="**${{ steps.datetime.outputs.target_datetime }}** (Irish time)"
+            if [ -n "$REMOVED" ]; then
+              DESC="$DESC\n🗑 Removed: $REMOVED"
+            fi
+            DESC="$DESC\n🎵 Added: $CREATED\n[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           else
             COLOR=15158332
             TITLE="Check Slot — Failed"
