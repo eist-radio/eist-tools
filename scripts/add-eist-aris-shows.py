@@ -165,14 +165,26 @@ class EistArisScheduler:
             return []
 
     def fetch_track_details(self, track_id: str) -> Optional[Dict]:
-        """Fetch track metadata from the undocumented track API."""
+        """Fetch track metadata from the undocumented track API.
+
+        Returns the JSON response on success, None on 404 (track genuinely
+        missing).  Raises on auth errors (401/403) so callers don't
+        misinterpret an auth failure as a deleted file.
+        """
         url = f"{API_BASE_URL}/{STATION_ID}/media/track"
         params = {"trackId": track_id}
 
         try:
             resp = self.session.get(url, params=params)
+            if resp.status_code in (401, 403):
+                raise requests.exceptions.HTTPError(
+                    f"{resp.status_code} Auth error for track {track_id}",
+                    response=resp,
+                )
             resp.raise_for_status()
             return resp.json()
+        except requests.exceptions.HTTPError:
+            raise
         except requests.exceptions.RequestException as exc:
             print(
                 f"Warning: Could not fetch track details for {track_id}: {exc}",
@@ -1146,6 +1158,11 @@ def mode_check_slot(
     if not scheduler.authenticated:
         scheduler.authenticate_with_playwright()
 
+    if not scheduler.authenticated:
+        print("\n✗ Authentication failed. Cannot safely validate track files — aborting to avoid replacing a valid show.",
+              file=sys.stderr)
+        sys.exit(1)
+
     # Fetch schedule with a small buffer around the slot
     fetch_start = slot_start - timedelta(minutes=10)
     fetch_end = slot_end + timedelta(minutes=10)
@@ -1196,7 +1213,12 @@ def mode_check_slot(
                 broken_show = show
                 break
             elif media_type == "mix" and track_id:
-                track_data = scheduler.fetch_track_details(track_id)
+                try:
+                    track_data = scheduler.fetch_track_details(track_id)
+                except requests.exceptions.HTTPError as exc:
+                    print(f"    → ✗ Auth error checking track file: {exc}", file=sys.stderr)
+                    print(f"      Aborting — cannot confirm file status without valid auth.", file=sys.stderr)
+                    sys.exit(1)
                 if track_data and track_data.get("tracks"):
                     print(f"    → Pre-record with valid file. No action needed.")
                 else:
