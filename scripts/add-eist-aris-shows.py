@@ -1164,16 +1164,7 @@ def mode_check_slot(
         print(f"\n✓ Slot at {slot_start.strftime('%H:%M')} UTC is outside broadcast hours (09:00-23:00). No action needed.")
         return
 
-    # Authenticate early so we can validate track IDs via the media API
-    if not scheduler.authenticated:
-        scheduler.authenticate_with_playwright()
-
-    if not scheduler.authenticated:
-        print("\n✗ Authentication failed. Cannot safely validate track files — aborting to avoid replacing a valid show.",
-              file=sys.stderr)
-        sys.exit(1)
-
-    # Fetch schedule with a small buffer around the slot
+    # Fetch schedule first (uses API key only — no Playwright needed)
     fetch_start = slot_start - timedelta(minutes=10)
     fetch_end = slot_end + timedelta(minutes=10)
     print(f"\nFetching schedule for {fetch_start.strftime('%H:%M')}-{fetch_end.strftime('%H:%M')} UTC...")
@@ -1223,12 +1214,18 @@ def mode_check_slot(
                 broken_show = show
                 break
             elif media_type == "mix" and track_id:
+                # Try track validation — authenticate lazily if API key alone gets 401
                 try:
                     track_data = scheduler.fetch_track_details(track_id)
-                except requests.exceptions.HTTPError as exc:
-                    print(f"    → ✗ Auth error checking track file: {exc}", file=sys.stderr)
-                    print(f"      Aborting — cannot confirm file status without valid auth.", file=sys.stderr)
-                    sys.exit(1)
+                except requests.exceptions.HTTPError:
+                    # API key wasn't enough, try with Playwright auth
+                    if not scheduler.authenticated:
+                        scheduler.authenticate_with_playwright()
+                    if not scheduler.authenticated:
+                        print(f"    → ✗ Auth failed — cannot validate track file.", file=sys.stderr)
+                        print(f"      Aborting to avoid replacing a valid show.", file=sys.stderr)
+                        sys.exit(1)
+                    track_data = scheduler.fetch_track_details(track_id)
                 if track_data and track_data.get("tracks"):
                     print(f"    → Pre-record with valid file. No action needed.")
                 else:
@@ -1277,6 +1274,13 @@ def mode_check_slot(
     if not eligible_1hr:
         print("\n⚠ All eligible shows are already scheduled this week. Exiting.")
         return
+
+    # Authenticate now if not already — needed for track validation and show creation
+    if not scheduler.authenticated:
+        scheduler.authenticate_with_playwright()
+    if not scheduler.authenticated:
+        print("\n✗ Authentication failed. Cannot validate tracks or create shows.", file=sys.stderr)
+        sys.exit(1)
 
     # Validate track files still exist in the media library
     validated = []
