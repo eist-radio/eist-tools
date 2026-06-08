@@ -102,9 +102,8 @@ class EistArisScheduler:
 
                 page.fill('input[type="email"]', self.login_username)
                 page.fill('input[type="password"]', self.login_password)
-                page.click('button[type="submit"]')
-                page.wait_for_load_state("networkidle", timeout=15_000)
-                page.wait_for_timeout(2_000)
+                page.click('button:has-text("Sign in")')
+                page.wait_for_url(lambda url: "/sign-in" not in url, timeout=15_000)
 
                 if "/sign-in" in page.url:
                     print("Warning: Still on login page after submit — login may have failed",
@@ -1091,8 +1090,8 @@ def mode_execute(
             page.wait_for_selector('input[type="email"]', timeout=10_000)
             page.fill('input[type="email"]', login_username or "")
             page.fill('input[type="password"]', login_password or "")
-            page.click('button[type="submit"]')
-            page.wait_for_timeout(2_000)
+            page.click('button:has-text("Sign in")')
+            page.wait_for_url(lambda url: "/sign-in" not in url, timeout=15_000)
             print("✓ Logged in\n")
 
             success_count = 0
@@ -1354,9 +1353,8 @@ def mode_check_slot(
             page.wait_for_selector('input[type="email"]', timeout=10_000)
             page.fill('input[type="email"]', login_username or "")
             page.fill('input[type="password"]', login_password or "")
-            page.click('button[type="submit"]')
-            page.wait_for_load_state("networkidle", timeout=15_000)
-            page.wait_for_timeout(2_000)
+            page.click('button:has-text("Sign in")')
+            page.wait_for_url(lambda url: "/sign-in" not in url, timeout=15_000)
             print("✓ Logged in\n")
 
             # Copy browser cookies to API session for track lookups
