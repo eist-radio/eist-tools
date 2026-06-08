@@ -84,8 +84,14 @@ jobs:
           echo "Target datetime (Irish time): $TARGET_DATETIME"
 
       - name: Check and fix slot
+        id: check
         run: |
-          python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless
+          OUTPUT=$(python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless 2>&1 | tee /dev/stderr)
+          if echo "$OUTPUT" | grep -q '✓ SUCCESS: Created'; then
+            echo "fixed=true" >> $GITHUB_OUTPUT
+          else
+            echo "fixed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload error screenshots
         if: failure()
@@ -96,14 +102,14 @@ jobs:
           retention-days: 7
 
       - name: Notify Discord
-        if: always() && env.DISCORD_WEBHOOK != ''
+        if: (failure() || steps.check.outputs.fixed == 'true') && env.DISCORD_WEBHOOK != ''
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
-          if [ "${{ job.status }}" == "success" ]; then
+          if [ "${{ steps.check.outputs.fixed }}" == "true" ]; then
             COLOR=3066993
-            TITLE="Check Slot — OK"
-            DESC="Schedule checked for **${{ steps.datetime.outputs.target_datetime }}** (Irish time). No issues or fix applied."
+            TITLE="Check Slot — Fixed"
+            DESC="Filled an empty slot for **${{ steps.datetime.outputs.target_datetime }}** (Irish time). [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           else
             COLOR=15158332
             TITLE="Check Slot — Failed"
