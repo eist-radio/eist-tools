@@ -1244,9 +1244,9 @@ def mode_check_slot(
 
     print(f"\nAction: {action.upper()}")
 
-    # Fetch eligible replacement shows from last 4 weeks
-    print("\nFetching eligible replacement shows from last 4 weeks...")
-    eligible_shows = scheduler.build_replay_list(slot_start, weeks_back=4)
+    # Fetch eligible replacement shows from last 6 weeks
+    print("\nFetching eligible replacement shows from last 6 weeks...")
+    eligible_shows = scheduler.build_replay_list(slot_start, weeks_back=6)
 
     # Filter to 1hr shows only
     eligible_1hr = [s for s in eligible_shows if s.get("scheduled_duration") == 60]
