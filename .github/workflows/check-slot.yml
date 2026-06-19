@@ -1,10 +1,9 @@
 name: Check and fix schedule slots
 
 on:
-  schedule:
-    # Hourly fallback during broadcast hours (Cloudflare Worker is primary)
-    # Covers 9am-midnight Irish time year-round (IST=UTC+1 summer, GMT=UTC winter)
-    - cron: '7 7-22 * * *'
+  # schedule disabled — GitHub Actions cron is unreliable; Cloudflare Worker is the primary trigger
+  # schedule:
+  #   - cron: '48 7-22 * * *'
 
   workflow_dispatch:
     inputs:
@@ -89,7 +88,7 @@ jobs:
           OUTPUT=$(python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless 2>&1 | tee /dev/stderr)
           if echo "$OUTPUT" | grep -q '✓ SUCCESS: Created'; then
             echo "fixed=true" >> $GITHUB_OUTPUT
-            CREATED=$(echo "$OUTPUT" | grep -oP "✓ SUCCESS: Created '\K[^']+")
+            CREATED=$(echo "$OUTPUT" | grep -oP "- '\K[^']+" | paste -sd ', ')
             REMOVED=$(echo "$OUTPUT" | grep -oP "Show '\K[^']+" | head -1)
             echo "created=$CREATED" >> $GITHUB_OUTPUT
             echo "removed=$REMOVED" >> $GITHUB_OUTPUT

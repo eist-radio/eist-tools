@@ -1148,30 +1148,40 @@ def mode_check_slot(
     headless: bool = False,
     dry_run: bool = False,
 ):
-    """Check the next hour's slot and auto-fix if empty or missing a file."""
+    """Check the next slot and auto-fix if empty or missing a file.
+
+    Handles both 1hr and 2hr slots. For 2hr slots, tries in order:
+    1. A single 2hr show
+    2. A 1hr show from the same host + a random 1hr show
+    3. Two random 1hr shows
+    """
     slot_start = round_up_to_hour(target_date)
-    slot_end = slot_start + timedelta(hours=1)
+    slot_end_1hr = slot_start + timedelta(hours=1)
+    slot_end_2hr = slot_start + timedelta(hours=2)
 
     print("\n" + "=" * 80)
     print("MODE: Check Slot")
     print("=" * 80)
     print(f"\nInput time:  {target_date.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Target slot: {slot_start.strftime('%Y-%m-%d %H:%M')} - {slot_end.strftime('%H:%M')} UTC")
+    print(f"Checking:    {slot_start.strftime('%Y-%m-%d %H:%M')} - {slot_end_2hr.strftime('%H:%M')} UTC (2hr window)")
 
     # Check broadcast window (08:00-23:00 UTC = 9am-midnight Irish)
     if slot_start.hour < 8 or slot_start.hour >= 23:
         print(f"\n✓ Slot at {slot_start.strftime('%H:%M')} UTC is outside broadcast hours (08:00-23:00). No action needed.")
         return
 
-    # Fetch schedule first (uses API key only — no Playwright needed)
+    second_hour_in_broadcast = 8 <= slot_end_1hr.hour < 23
+
+    # Fetch schedule for the full 2hr window
     fetch_start = slot_start - timedelta(minutes=10)
-    fetch_end = slot_end + timedelta(minutes=10)
+    fetch_end = slot_end_2hr + timedelta(minutes=10)
     print(f"\nFetching schedule for {fetch_start.strftime('%H:%M')}-{fetch_end.strftime('%H:%M')} UTC...")
 
     schedule = scheduler.fetch_schedule(fetch_start, fetch_end)
 
-    # Filter to shows that overlap our target slot
-    overlapping = []
+    # Separate shows overlapping the first and second hours
+    overlapping_first = []
+    overlapping_second = []
     for show in schedule:
         show_start_str = show.get("start") or show.get("startDateUtc")
         show_end_str = show.get("end") or show.get("endDateUtc")
@@ -1181,21 +1191,28 @@ def mode_check_slot(
         show_start = datetime.fromisoformat(show_start_str.replace("Z", "+00:00")).replace(tzinfo=None)
         show_end = datetime.fromisoformat(show_end_str.replace("Z", "+00:00")).replace(tzinfo=None)
 
-        # Show overlaps slot if it starts before slot ends AND ends after slot starts
-        if show_start < slot_end and show_end > slot_start:
-            overlapping.append(show)
+        if show_start < slot_end_1hr and show_end > slot_start:
+            overlapping_first.append(show)
+        if second_hour_in_broadcast and show_start < slot_end_2hr and show_end > slot_end_1hr:
+            overlapping_second.append(show)
 
-    if not overlapping:
-        print(f"\n⚠ Slot {slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')} is EMPTY. Needs filling.")
+    # Determine action and slot duration
+    action = None
+    broken_show = None
+    slot_duration = 60
+
+    if not overlapping_first:
         action = "fill"
-        broken_show = None
+        if second_hour_in_broadcast and not overlapping_second:
+            slot_duration = 120
+            print(f"\n⚠ 2hr slot {slot_start.strftime('%H:%M')}-{slot_end_2hr.strftime('%H:%M')} is EMPTY. Needs filling.")
+        else:
+            slot_duration = 60
+            print(f"\n⚠ Slot {slot_start.strftime('%H:%M')}-{slot_end_1hr.strftime('%H:%M')} is EMPTY. Needs filling.")
     else:
-        # Check each overlapping show
-        print(f"\nFound {len(overlapping)} show(s) in slot:")
-        action = None
-        broken_show = None
+        print(f"\nFound {len(overlapping_first)} show(s) in first hour:")
 
-        for show in overlapping:
+        for show in overlapping_first:
             title = show.get("title", "(no title)")
             media = show.get("media", {})
             media_type = media.get("type", "unknown")
@@ -1221,8 +1238,6 @@ def mode_check_slot(
                     if not scheduler.authenticated:
                         scheduler.authenticate_with_playwright()
                     if not scheduler.authenticated:
-                        # Can't validate, but show has a trackId — assume valid
-                        # rather than risking replacing a good show
                         print(f"    → ⚠ Cannot validate track (auth unavailable). Assuming valid.")
                         continue
                     track_data = scheduler.fetch_track_details(track_id)
@@ -1240,20 +1255,31 @@ def mode_check_slot(
             print(f"\n✓ Slot is OK. No action needed.")
             return
 
+        # For replacements, check the broken show's actual duration
+        if broken_show:
+            bs_start_str = broken_show.get("start") or broken_show.get("startDateUtc")
+            bs_end_str = broken_show.get("end") or broken_show.get("endDateUtc")
+            if bs_start_str and bs_end_str:
+                bs_start = datetime.fromisoformat(bs_start_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                bs_end = datetime.fromisoformat(bs_end_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                bs_duration = (bs_end - bs_start).total_seconds() / 60
+                if abs(bs_duration - 120) <= 5:
+                    slot_duration = 120
+
     # --- Action needed: fill empty slot or replace broken pre-record ---
 
-    print(f"\nAction: {action.upper()}")
+    print(f"\nAction: {action.upper()} ({slot_duration}min slot)")
 
     # Fetch eligible replacement shows from last 6 weeks
     print("\nFetching eligible replacement shows from last 6 weeks...")
     eligible_shows = scheduler.build_replay_list(slot_start, weeks_back=6)
 
-    # Filter to 1hr shows only
     eligible_1hr = [s for s in eligible_shows if s.get("scheduled_duration") == 60]
-    print(f"Eligible 1hr shows: {len(eligible_1hr)}")
+    eligible_2hr = [s for s in eligible_shows if s.get("scheduled_duration") == 120]
+    print(f"Eligible shows: {len(eligible_1hr)} x 1hr, {len(eligible_2hr)} x 2hr")
 
-    if not eligible_1hr:
-        print("\n⚠ No eligible 1hr shows found for replacement. Exiting.")
+    if not eligible_1hr and not eligible_2hr:
+        print("\n⚠ No eligible shows found for replacement. Exiting.")
         return
 
     # Exclude shows already in this week's schedule to prevent duplicates
@@ -1269,9 +1295,10 @@ def mode_check_slot(
             scheduled_track_ids.add(tid)
 
     eligible_1hr = [s for s in eligible_1hr if s.get("track_id") not in scheduled_track_ids]
-    print(f"After duplicate filtering: {len(eligible_1hr)} eligible shows")
+    eligible_2hr = [s for s in eligible_2hr if s.get("track_id") not in scheduled_track_ids]
+    print(f"After duplicate filtering: {len(eligible_1hr)} x 1hr, {len(eligible_2hr)} x 2hr")
 
-    if not eligible_1hr:
+    if not eligible_1hr and not eligible_2hr:
         print("\n⚠ All eligible shows are already scheduled this week. Exiting.")
         return
 
@@ -1283,52 +1310,151 @@ def mode_check_slot(
         sys.exit(1)
 
     # Validate track files still exist in the media library
-    validated = []
+    validated_1hr = []
     for s in eligible_1hr:
         tid = s.get("track_id")
         if not tid:
             continue
         track_data = scheduler.fetch_track_details(tid)
         if track_data and track_data.get("tracks"):
-            validated.append(s)
+            validated_1hr.append(s)
         else:
             print(f"  Skipping '{s['title']}' — track file deleted from media library")
 
-    eligible_1hr = validated
-    print(f"After track validation: {len(eligible_1hr)} eligible shows")
+    validated_2hr = []
+    for s in eligible_2hr:
+        tid = s.get("track_id")
+        if not tid:
+            continue
+        track_data = scheduler.fetch_track_details(tid)
+        if track_data and track_data.get("tracks"):
+            validated_2hr.append(s)
+        else:
+            print(f"  Skipping '{s['title']}' — track file deleted from media library")
 
-    if not eligible_1hr:
+    eligible_1hr = validated_1hr
+    eligible_2hr = validated_2hr
+    print(f"After track validation: {len(eligible_1hr)} x 1hr, {len(eligible_2hr)} x 2hr")
+
+    if not eligible_1hr and not eligible_2hr:
         print("\n⚠ No eligible shows with valid track files. Exiting.")
         return
 
-    # Prefer a show by the same artist, fall back to random
-    replacement = None
-    if broken_show:
-        original_artist_ids = set(broken_show.get("artistIds") or [])
-        if original_artist_ids:
-            same_artist = [s for s in eligible_1hr if original_artist_ids & set(s.get("artist_ids") or [])]
-            if same_artist:
-                replacement = random.choice(same_artist)
-                print(f"\nFound {len(same_artist)} show(s) by the same artist — picking one.")
+    # --- Select replacement show(s) ---
 
-    if not replacement:
-        replacement = random.choice(eligible_1hr)
+    mappings = []
 
-    print(f"\nSelected replacement: '{replacement['title']}'")
-    print(f"  Track ID: {replacement.get('track_id')}")
-    print(f"  Duration: {replacement.get('duration')} min")
+    if slot_duration == 120:
+        # 2hr slot: cascading logic
+        if eligible_2hr:
+            # Option 1: Single 2hr show (prefer same artist if replacing)
+            replacement = None
+            if broken_show:
+                original_artist_ids = set(broken_show.get("artistIds") or [])
+                if original_artist_ids:
+                    same_artist = [s for s in eligible_2hr if original_artist_ids & set(s.get("artist_ids") or [])]
+                    if same_artist:
+                        replacement = random.choice(same_artist)
+                        print(f"\nFound {len(same_artist)} 2hr show(s) by the same artist — picking one.")
+            if not replacement:
+                replacement = random.choice(eligible_2hr)
 
-    # Build the slot and show mapping for create_show_from_mapping()
-    slot_data = {
-        "start": slot_start.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-        "end": slot_end.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-        "duration_minutes": 60,
-        "scheduled_duration": 60,
-        "day_of_week": slot_start.strftime("%A"),
-        "date": slot_start.strftime("%Y-%m-%d"),
-    }
+            print(f"\nSelected 2hr replacement: '{replacement['title']}'")
+            print(f"  Track ID: {replacement.get('track_id')}")
+            print(f"  Duration: {replacement.get('duration')} min")
+            slot_data = {
+                "start": slot_start.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "end": slot_end_2hr.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "duration_minutes": 120,
+                "scheduled_duration": 120,
+                "day_of_week": slot_start.strftime("%A"),
+                "date": slot_start.strftime("%Y-%m-%d"),
+            }
+            mappings.append({"slot": slot_data, "show": replacement})
 
-    mapping = {"slot": slot_data, "show": replacement}
+        elif eligible_1hr:
+            # No 2hr shows available — fill with two 1hr shows
+            slot_data_1 = {
+                "start": slot_start.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "end": slot_end_1hr.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "duration_minutes": 60,
+                "scheduled_duration": 60,
+                "day_of_week": slot_start.strftime("%A"),
+                "date": slot_start.strftime("%Y-%m-%d"),
+            }
+            slot_data_2 = {
+                "start": slot_end_1hr.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "end": slot_end_2hr.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "duration_minutes": 60,
+                "scheduled_duration": 60,
+                "day_of_week": slot_end_1hr.strftime("%A"),
+                "date": slot_end_1hr.strftime("%Y-%m-%d"),
+            }
+
+            # Option 2: Try host's 1hr show + random 1hr show
+            host_show = None
+            if broken_show:
+                original_artist_ids = set(broken_show.get("artistIds") or [])
+                if original_artist_ids:
+                    same_artist = [s for s in eligible_1hr if original_artist_ids & set(s.get("artist_ids") or [])]
+                    if same_artist:
+                        host_show = random.choice(same_artist)
+                        print(f"\nFound {len(same_artist)} 1hr show(s) by the same host — picking one.")
+
+            if host_show:
+                remaining = [s for s in eligible_1hr if s.get("track_id") != host_show.get("track_id")]
+                random_show = random.choice(remaining) if remaining else random.choice(eligible_1hr)
+                print(f"\nSelected host show:   '{host_show['title']}'")
+                print(f"Selected random show: '{random_show['title']}'")
+                mappings.append({"slot": slot_data_1, "show": host_show})
+                mappings.append({"slot": slot_data_2, "show": random_show})
+            else:
+                # Option 3: Two random 1hr shows
+                show1 = random.choice(eligible_1hr)
+                remaining = [s for s in eligible_1hr if s.get("track_id") != show1.get("track_id")]
+                show2 = random.choice(remaining) if remaining else random.choice(eligible_1hr)
+                print(f"\nNo host match — selecting 2 random 1hr shows:")
+                print(f"  Show 1: '{show1['title']}'")
+                print(f"  Show 2: '{show2['title']}'")
+                mappings.append({"slot": slot_data_1, "show": show1})
+                mappings.append({"slot": slot_data_2, "show": show2})
+        else:
+            print("\n⚠ No eligible shows available for 2hr slot. Exiting.")
+            return
+
+    else:
+        # 1hr slot: existing logic
+        if not eligible_1hr:
+            print("\n⚠ No eligible 1hr shows found. Exiting.")
+            return
+
+        replacement = None
+        if broken_show:
+            original_artist_ids = set(broken_show.get("artistIds") or [])
+            if original_artist_ids:
+                same_artist = [s for s in eligible_1hr if original_artist_ids & set(s.get("artist_ids") or [])]
+                if same_artist:
+                    replacement = random.choice(same_artist)
+                    print(f"\nFound {len(same_artist)} show(s) by the same artist — picking one.")
+
+        if not replacement:
+            replacement = random.choice(eligible_1hr)
+
+        print(f"\nSelected replacement: '{replacement['title']}'")
+        print(f"  Track ID: {replacement.get('track_id')}")
+        print(f"  Duration: {replacement.get('duration')} min")
+
+        slot_data = {
+            "start": slot_start.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+            "end": slot_end_1hr.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+            "duration_minutes": 60,
+            "scheduled_duration": 60,
+            "day_of_week": slot_start.strftime("%A"),
+            "date": slot_start.strftime("%Y-%m-%d"),
+        }
+        mappings.append({"slot": slot_data, "show": replacement})
+
+    # --- Dry run ---
 
     if dry_run:
         print("\n" + "=" * 80)
@@ -1338,13 +1464,17 @@ def mode_check_slot(
         if action == "replace" and broken_show:
             print(f"\nWould DELETE: '{broken_show.get('title', '(no title)')}'")
 
-        print(f"\nWould CREATE:")
-        print(f"  Title: {replacement['title']} (éist arís)")
-        print(f"  Slot: {slot_data['day_of_week']}, {slot_data['date']}")
-        print(f"  Time: {slot_data['start']} - {slot_data['end']}")
-        print(f"  Track ID: {replacement.get('track_id', 'N/A')}")
-        if replacement.get("artist_ids"):
-            print(f"  Artist IDs: {replacement['artist_ids']}")
+        for i, m in enumerate(mappings, 1):
+            show = m["show"]
+            slot = m["slot"]
+            print(f"\nWould CREATE ({i}/{len(mappings)}):")
+            print(f"  Title: {show['title']} (éist arís)")
+            print(f"  Slot: {slot['day_of_week']}, {slot['date']}")
+            print(f"  Time: {slot['start']} - {slot['end']}")
+            print(f"  Duration: {slot['scheduled_duration']} min")
+            print(f"  Track ID: {show.get('track_id', 'N/A')}")
+            if show.get("artist_ids"):
+                print(f"  Artist IDs: {show['artist_ids']}")
 
         print("\n" + "=" * 80)
         print("DRY RUN COMPLETE")
@@ -1377,20 +1507,20 @@ def mode_check_slot(
                     path=cookie.get("path"),
                 )
 
-            # Fetch actual track title from media API (needs auth cookies)
-            track_id = replacement.get("track_id")
-            if track_id and not replacement.get("track_title"):
-                track_details = scheduler.fetch_track_details(track_id)
-                if track_details:
-                    tracks = track_details.get("tracks") or []
-                    matching = next(
-                        (t for t in tracks if t.get("id") == track_id), None
-                    )
-                    if matching and matching.get("title"):
-                        replacement["track_title"] = matching["title"]
-                        print(f"Track title resolved: {replacement['track_title']}")
-                    else:
-                        print("  Track title not found (file already validated)")
+            # Resolve track titles for all replacement shows
+            for m in mappings:
+                show = m["show"]
+                track_id = show.get("track_id")
+                if track_id and not show.get("track_title"):
+                    track_details = scheduler.fetch_track_details(track_id)
+                    if track_details:
+                        tracks = track_details.get("tracks") or []
+                        matching = next(
+                            (t for t in tracks if t.get("id") == track_id), None
+                        )
+                        if matching and matching.get("title"):
+                            show["track_title"] = matching["title"]
+                            print(f"Track title resolved: {show['track_title']}")
 
             # Step 1: Delete broken show if replacing
             if action == "replace" and broken_show:
@@ -1409,31 +1539,38 @@ def mode_check_slot(
                         pass
                     raise
 
-            if action == "replace":
                 page.wait_for_timeout(1_000)
 
-            # Step 2: Create replacement show
-            try:
-                print(f"\nCreating replacement show...")
-                scheduler.create_show_from_mapping(page, mapping)
-                print("\n" + "=" * 80)
-                print(f"✓ SUCCESS: Created '{replacement['title']} (éist arís)'")
-                print(f"  Slot: {slot_data['start']} - {slot_data['end']}")
-                print("=" * 80)
-            except Exception as exc:
-                if "conflicts" in str(exc).lower():
-                    print(f"\n⚠ Conflict with existing event (likely a recurring rule).")
-                    print("  This slot cannot be auto-filled. Manual intervention needed.")
-                    scheduler.close_any_open_modals(page)
-                else:
-                    print(f"\n✗ Failed to create show: {exc}")
-                    try:
-                        page.screenshot(path="error_screenshot_create.png")
-                        print("  Screenshot saved to error_screenshot_create.png")
-                    except Exception:
-                        pass
-                    scheduler.close_any_open_modals(page)
-                    raise
+            # Step 2: Create replacement show(s)
+            for i, m in enumerate(mappings, 1):
+                try:
+                    print(f"\nCreating show {i}/{len(mappings)}...")
+                    scheduler.create_show_from_mapping(page, m)
+                    show = m["show"]
+                    slot = m["slot"]
+                    print(f"✓ Created '{show['title']} (éist arís)' at {slot['start']}")
+                except Exception as exc:
+                    if "conflicts" in str(exc).lower():
+                        print(f"\n⚠ Conflict with existing event (likely a recurring rule).")
+                        print("  This slot cannot be auto-filled. Manual intervention needed.")
+                        scheduler.close_any_open_modals(page)
+                    else:
+                        print(f"\n✗ Failed to create show: {exc}")
+                        try:
+                            page.screenshot(path=f"error_screenshot_create_{i}.png")
+                            print(f"  Screenshot saved to error_screenshot_create_{i}.png")
+                        except Exception:
+                            pass
+                        scheduler.close_any_open_modals(page)
+                        raise
+
+            print("\n" + "=" * 80)
+            print(f"✓ SUCCESS: Created {len(mappings)} show(s)")
+            for m in mappings:
+                show = m["show"]
+                slot = m["slot"]
+                print(f"  - '{show['title']} (éist arís)' at {slot['start']} ({slot['scheduled_duration']}min)")
+            print("=" * 80)
 
         except Exception as exc:
             print(f"\nError during check-slot execution: {exc}")
