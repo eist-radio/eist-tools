@@ -88,7 +88,7 @@ jobs:
           OUTPUT=$(python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless 2>&1 | tee /dev/stderr)
           if echo "$OUTPUT" | grep -q '✓ SUCCESS: Created'; then
             echo "fixed=true" >> $GITHUB_OUTPUT
-            CREATED=$(echo "$OUTPUT" | grep -oP "- '\K[^']+" | paste -sd ', ')
+            CREATED=$(echo "$OUTPUT" | grep -oP -- "- '\K[^']+" | paste -sd ', ')
             REMOVED=$(echo "$OUTPUT" | grep -oP "Show '\K[^']+" | head -1)
             echo "created=$CREATED" >> $GITHUB_OUTPUT
             echo "removed=$REMOVED" >> $GITHUB_OUTPUT
