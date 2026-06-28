@@ -30,6 +30,8 @@ from dotenv import load_dotenv
 
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 
+REQUIRED_GCLOUD_ACCOUNT = "eistcork@gmail.com"
+
 QUICKCONNECT_ID = "eistcork"
 NAS_SHARE = "music"
 NAS_BASE_PATH = f"/{NAS_SHARE}/eist-archive"
@@ -54,11 +56,32 @@ class GoogleDriveClient:
     def __init__(self) -> None:
         self.token: Optional[str] = None
         self._token_acquired_at: float = 0
+        self._account_verified = False
+
+    @staticmethod
+    def _verify_account() -> None:
+        result = subprocess.run(
+            ["gcloud", "auth", "list", "--filter=status:ACTIVE",
+             "--format=value(account)"],
+            capture_output=True, text=True,
+        )
+        active = result.stdout.strip()
+        if active != REQUIRED_GCLOUD_ACCOUNT:
+            print(
+                f"Error: active gcloud account is '{active}', "
+                f"expected '{REQUIRED_GCLOUD_ACCOUNT}'.\n"
+                f"Run: gcloud config set account {REQUIRED_GCLOUD_ACCOUNT}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     def get_token(self) -> str:
         if self.token and (time.time() - self._token_acquired_at) < self.TOKEN_REFRESH_INTERVAL:
             return self.token
         self.token = None
+        if not self._account_verified:
+            self._verify_account()
+            self._account_verified = True
         result = subprocess.run(
             ["gcloud", "auth", "print-access-token"],
             capture_output=True,
@@ -77,6 +100,7 @@ class GoogleDriveClient:
             print("Error: gcloud authentication failed.", file=sys.stderr)
             sys.exit(1)
 
+        self._verify_account()
         result = subprocess.run(
             ["gcloud", "auth", "print-access-token"],
             capture_output=True,
