@@ -663,6 +663,7 @@ def mode_transfer(
                 drive_path=drive_path,
                 nas_path=remote_file_path,
                 size=size,
+                created=item.get("createdTime", ""),
                 transferred_at=datetime.now(timezone.utc).isoformat(),
             )
 
@@ -689,10 +690,10 @@ def mode_cleanup(state: ColdStorageState) -> None:
         print("No transferred files to clean up.")
         return
 
-    # Find the newest file date to use as the cutoff
+    # Find the newest file creation date to use as the cutoff
     dates = []
     for entry in transferred.values():
-        created = entry.get("created") or entry.get("transferred_at", "")
+        created = entry.get("created", "")
         if created:
             dates.append(created[:10])
     cutoff = max(dates) if dates else "unknown"
