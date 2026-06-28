@@ -489,6 +489,9 @@ def mode_scan(rc: RadiocultClient, weeks: int) -> List[Dict]:
         created = t.get("created")
         if not created:
             continue
+        filename = t.get("filename", "")
+        if not filename.lower().endswith(".mp3"):
+            continue
         dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
         if dt < cutoff:
             old_media.append(t)
