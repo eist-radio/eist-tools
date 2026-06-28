@@ -124,6 +124,7 @@ In addition to the standard setup above, the archive manager requires:
 
 - **gcloud CLI** — handles Google Drive authentication. [Install here](https://cloud.google.com/sdk/docs/install).
 - One-time login: `gcloud auth login eistcork@gmail.com --enable-gdrive-access`
+- The script verifies the active gcloud account is `eistcork@gmail.com` before uploading. If you have multiple Google accounts, make sure it's the active one: `gcloud config set account eistcork@gmail.com`
 
 ### Modes
 
@@ -170,7 +171,7 @@ Moves old files from the `éist - archive` Google Drive folder to the DS214play 
 
 ### Prerequisites
 
-- **gcloud CLI** — same auth as the archive manager: `gcloud auth login eistcork@gmail.com --enable-gdrive-access`
+- **gcloud CLI** — same auth as the archive manager: `gcloud auth login eistcork@gmail.com --enable-gdrive-access`. The script will refuse to run if a different account is active.
 - **Synology NAS** — File Station package installed, with a shared folder matching the `--nas-path` root (default: `music`)
 - NAS credentials in `.env`:
 
