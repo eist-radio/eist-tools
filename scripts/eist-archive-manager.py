@@ -9,7 +9,8 @@ Modes:
 - (no flags)   → full run: delete state files, then scan → archive → cleanup
 - --scan       → list media older than N weeks, save to archive-scan.json
 - --archive    → download old media, upload to Google Drive, tag in Radiocult
-- --cleanup    → tag archived media as ready_to_delete (manual deletion in Radiocult UI)
+- --cleanup    → tag archived media as ready_to_delete
+- --delete     → delete media tagged ready_to_delete via the Radiocult API
 """
 
 import argparse
@@ -194,6 +195,14 @@ class RadiocultClient:
         resp = self.session.put(
             f"{API_BASE_URL}/{STATION_ID}/media/{media_type}/{media_id}/tag/{tag_id}"
         )
+        resp.raise_for_status()
+
+    def delete_media(self, media_id: str, media_type: str = "track") -> None:
+        resp = self.session.delete(
+            f"{API_BASE_URL}/{STATION_ID}/media/{media_type}/{media_id}"
+        )
+        if resp.status_code == 404:
+            return  # already gone — treat as success
         resp.raise_for_status()
 
 
@@ -712,22 +721,79 @@ def mode_cleanup(
             print(f"  {entry.get('title', tid)}")
         return
 
-    # Tag as ready_to_delete so they can be filtered and deleted in the Radiocult UI
+    # Tag as ready_to_delete so `--delete` can pick them up in a later run
     delete_tag_id = rc.find_or_create_tag("ready_to_delete")
     tagged = 0
     for tid, entry in verified.items():
         title = entry.get("title", tid)
+        mtype = entry.get("media_type", "track")
         try:
-            mtype = entry.get("media_type", "track")
             rc.tag_media(tid, delete_tag_id, mtype)
             tagged += 1
-            state.mark(tid, "deleted")
             print(f"  Tagged: {title}")
+        except requests.exceptions.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                state.mark(tid, "deleted", deleted_at=datetime.now(timezone.utc).isoformat())
+                print(f"  {title}: already gone from Radiocult, marking deleted")
+            else:
+                print(f"  Warning: could not tag {title}: {exc}", file=sys.stderr)
         except Exception as exc:
             print(f"  Warning: could not tag {title}: {exc}", file=sys.stderr)
 
     print(f"\nTagged {tagged}/{len(verified)} tracks as ready_to_delete")
-    print("Delete them manually in the Radiocult Media library using the Tag filter.")
+    print("Run --delete to remove them from Radiocult via the API.")
+
+
+def mode_delete(
+    rc: RadiocultClient,
+    state: ArchiveStateManager,
+    dry_run: bool,
+) -> None:
+    to_delete = {
+        tid: entry
+        for tid, entry in state.state.items()
+        if entry.get("status") == "archived"
+    }
+
+    if not to_delete:
+        print("No tracks tagged ready_to_delete pending deletion.")
+        return
+
+    print(f"\n{len(to_delete)} tagged items pending deletion")
+
+    # Re-check the future schedule in case it changed since --cleanup ran
+    print("\nChecking future schedule (next 12 weeks)...")
+    future_track_ids = rc.get_future_track_ids(weeks_ahead=12)
+    scheduled = {tid: entry for tid, entry in to_delete.items() if tid in future_track_ids}
+    if scheduled:
+        print(f"\n  Skipping {len(scheduled)} tracks now back in future shows:")
+        for tid, entry in scheduled.items():
+            print(f"    {entry.get('title', tid)}")
+        to_delete = {tid: entry for tid, entry in to_delete.items() if tid not in future_track_ids}
+
+    if not to_delete:
+        print("\nAll pending tracks are now scheduled again. Nothing to delete.")
+        return
+
+    if dry_run:
+        print(f"\n[DRY RUN] Would delete {len(to_delete)} items:")
+        for tid, entry in to_delete.items():
+            print(f"  {entry.get('title', tid)}")
+        return
+
+    deleted = 0
+    for tid, entry in to_delete.items():
+        title = entry.get("title", tid)
+        mtype = entry.get("media_type", "track")
+        try:
+            rc.delete_media(tid, mtype)
+            state.mark(tid, "deleted", deleted_at=datetime.now(timezone.utc).isoformat())
+            deleted += 1
+            print(f"  Deleted: {title}")
+        except Exception as exc:
+            print(f"  Warning: could not delete {title}: {exc}", file=sys.stderr)
+
+    print(f"\nDeleted {deleted}/{len(to_delete)} tracks from Radiocult")
 
     # Prune completed entries from scan file
     scan_path = "archive-scan.json"
@@ -756,7 +822,8 @@ def main():
     )
     parser.add_argument("--scan", action="store_true", help="List tracks and recordings older than --weeks")
     parser.add_argument("--archive", action="store_true", help="Download + upload to Drive")
-    parser.add_argument("--cleanup", action="store_true", help="Tag archived media as ready_to_delete for manual removal")
+    parser.add_argument("--cleanup", action="store_true", help="Tag archived media as ready_to_delete")
+    parser.add_argument("--delete", action="store_true", help="Delete media already tagged ready_to_delete via the API")
     parser.add_argument("--weeks", type=int, default=8, help="Age threshold in weeks (default: 8)")
     parser.add_argument("--output", default="./archive-tmp", help="Temp download directory")
     parser.add_argument("--drive-folder", default="éist - archive", help="Root Google Drive folder name")
@@ -764,7 +831,7 @@ def main():
     parser.add_argument("--interactive", action="store_true", help="Show browser window")
     args = parser.parse_args()
 
-    run_all = not (args.scan or args.archive or args.cleanup)
+    run_all = not (args.scan or args.archive or args.cleanup or args.delete)
     if run_all:
         args.scan = True
         args.archive = True
@@ -804,6 +871,10 @@ def main():
         rc.authenticate(headless=headless)
         drive = GoogleDriveClient()
         mode_cleanup(rc, drive, state, args.dry_run, args.output, args.drive_folder)
+
+    if args.delete:
+        rc.authenticate(headless=headless)
+        mode_delete(rc, state, args.dry_run)
 
 
 if __name__ == "__main__":
