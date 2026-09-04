@@ -1,0 +1,130 @@
+name: Archive old media to Drive
+
+# Downloads Radiocult media older than N weeks, uploads it to Google Drive,
+# then commits the updated state files back so reruns stay idempotent.
+#
+# Google Drive auth uses a stored OAuth refresh token (no gcloud on the runner):
+#   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN
+# generated once locally for eistcork@gmail.com with a Desktop-type client and
+# the drive scope. Keep the OAuth consent screen in Production, not Testing,
+# or the refresh token expires after 7 days.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'What to run'
+        type: choice
+        default: full
+        options:
+          - full      # scan + archive + cleanup (state preserved)
+          - scan      # list stale media only
+          - archive   # download + upload to Drive
+          - cleanup   # tag archived media ready_to_delete
+      weeks:
+        description: 'Age threshold in weeks'
+        type: string
+        default: '8'
+      dry_run:
+        description: 'Preview only, change nothing'
+        type: boolean
+        default: true
+
+  # Monthly unattended run. The keepalive workflow stops GitHub disabling this.
+  schedule:
+    - cron: '23 4 2 * *'  # 2nd of every month at 04:23 UTC
+
+permissions:
+  contents: write
+
+concurrency:
+  group: archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350  # runner hard ceiling is 6h (360m)
+
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
+      RADIOCULT_USER: ${{ secrets.RADIOCULT_USER }}
+      RADIOCULT_PW: ${{ secrets.RADIOCULT_PW }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests python-dotenv playwright
+
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Resolve inputs
+        id: cfg
+        run: |
+          # Scheduled runs default to a live full run; dispatch uses the inputs.
+          MODE="${{ inputs.mode || 'full' }}"
+          WEEKS="${{ inputs.weeks || '8' }}"
+          DRY="${{ inputs.dry_run }}"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MODE="full"
+            DRY="false"
+          fi
+          case "$MODE" in
+            # Pass all three flags explicitly. The no-flag path wipes
+            # archive-state.json first, which would break commit-back idempotency.
+            full)    FLAGS="--scan --archive --cleanup" ;;
+            scan)    FLAGS="--scan" ;;
+            archive) FLAGS="--archive" ;;
+            cleanup) FLAGS="--cleanup" ;;
+          esac
+          [ "$DRY" = "true" ] && FLAGS="$FLAGS --dry-run"
+          echo "flags=$FLAGS --weeks $WEEKS" >> "$GITHUB_OUTPUT"
+          echo "dry=$DRY" >> "$GITHUB_OUTPUT"
+          echo "Mode=$MODE  Weeks=$WEEKS  DryRun=$DRY" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run archive manager
+        run: |
+          echo "Free disk before run:"; df -h / | tail -1
+          python scripts/eist-archive-manager.py ${{ steps.cfg.outputs.flags }}
+          echo "Free disk after run:"; df -h / | tail -1
+
+      - name: Commit state back
+        if: always() && steps.cfg.outputs.dry != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # State files are gitignored (*.json), so force-add them.
+          git add -f archive-state.json archive-scan.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No state changes to commit."
+          else
+            git commit -m "chore: update archive state [skip ci]"
+            git push
+          fi
+
+      - name: Upload error screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archive-errors-${{ github.run_number }}
+          path: |
+            error_screenshot_*.png
+            error-screenshot.png
+          retention-days: 7
+          if-no-files-found: ignore
