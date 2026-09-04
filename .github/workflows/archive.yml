@@ -57,6 +57,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so the state commit can rebase on push
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -133,7 +135,20 @@ jobs:
             echo "No state changes to commit."
           else
             git commit -m "chore: update archive state [skip ci]"
-            git push
+            # Remote main may have advanced (a direct push or another run) since
+            # checkout, so rebase our state commit on top and retry the push.
+            for attempt in 1 2 3 4 5; do
+              if git push; then
+                echo "Pushed state on attempt $attempt."
+                break
+              fi
+              echo "Push rejected (attempt $attempt), rebasing on origin/main..."
+              git pull --rebase --autostash origin main
+              if [ "$attempt" = "5" ]; then
+                echo "::error::Could not push archive state after 5 attempts."
+                exit 1
+              fi
+            done
           fi
 
       - name: Upload error screenshots
