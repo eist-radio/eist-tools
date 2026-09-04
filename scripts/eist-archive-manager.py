@@ -239,10 +239,50 @@ class GoogleDriveClient:
             )
             sys.exit(1)
 
+    @staticmethod
+    def _has_oauth_env() -> bool:
+        return bool(
+            os.getenv("GOOGLE_CLIENT_ID")
+            and os.getenv("GOOGLE_CLIENT_SECRET")
+            and os.getenv("GOOGLE_REFRESH_TOKEN")
+        )
+
+    def _token_from_refresh(self) -> str:
+        resp = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+                "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+                "refresh_token": os.getenv("GOOGLE_REFRESH_TOKEN"),
+                "grant_type": "refresh_token",
+            },
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            print(
+                f"Error: OAuth token refresh failed ({resp.status_code}): {resp.text}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        token = resp.json().get("access_token")
+        if not token:
+            print("Error: OAuth refresh returned no access_token.", file=sys.stderr)
+            sys.exit(1)
+        return token
+
     def get_token(self) -> str:
         if self.token and (time.time() - self._token_acquired_at) < self.TOKEN_REFRESH_INTERVAL:
             return self.token
         self.token = None
+
+        # Unattended path (CI / GitHub runner): exchange a stored refresh token.
+        # Falls through to gcloud below when the env vars are absent, so local
+        # runs are unchanged.
+        if self._has_oauth_env():
+            self.token = self._token_from_refresh()
+            self._token_acquired_at = time.time()
+            return self.token
+
         if not self._account_verified:
             self._verify_account()
             self._account_verified = True
