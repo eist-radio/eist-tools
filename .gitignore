@@ -1,8 +1,15 @@
 __pycache__/
 .env
-*.json
 error_screenshot_*.png
 error-screenshot.png
 debug_*.png
 cold-storage-tmp/
 archive-tmp/
+
+# Ignore JSON by default so credential dumps and scratch files never land in a
+# commit by accident, then allow back the few that are meant to be tracked.
+*.json
+!archive-state.json
+!storage-alert-state.json
+!cloudflare-worker/package.json
+!cloudflare-worker/package-lock.json

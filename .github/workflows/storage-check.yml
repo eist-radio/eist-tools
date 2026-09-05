@@ -109,8 +109,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # State files are gitignored (*.json), so force-add.
-          git add -f storage-alert-state.json 2>/dev/null || true
+          git add storage-alert-state.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No state change to commit."
           else

@@ -162,7 +162,7 @@ The cleanup step checks the next 12 weeks of scheduled shows and will not delete
 
 ### State files
 
-- `archive-scan.json` — last scan results (re-used by `--archive` if present)
+- `archive-scan.json` — last scan results, re-used by `--archive` in the same run. Untracked scratch: a standalone `--archive` on a fresh checkout just re-scans.
 - `archive-state.json` — tracks archive/delete status per file, ensures re-runs are idempotent
 
 ## Cold Storage (Google Drive → NAS)

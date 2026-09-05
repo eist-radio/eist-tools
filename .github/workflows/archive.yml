@@ -185,6 +185,9 @@ jobs:
             DESC="${DESC}"$'\n'"${NAMES}"
           fi
           DESC="${DESC}"$'\n'"${TAGGED} tagged ready_to_delete."
+          # Cleanup only tags. Radiocult storage is unchanged until someone
+          # removes the tagged files, so spell out the manual step.
+          DESC="${DESC}"$'\n'"Nothing was deleted from RadioCult. Log in and manually delete files that have the ready_to_delete tag."
 
           # jq builds the JSON so nothing needs hand-escaping. Discord caps an
           # embed description at 4096 characters and rejects the whole payload
@@ -209,8 +212,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # State files are gitignored (*.json), so force-add them.
-          git add -f archive-state.json archive-scan.json 2>/dev/null || true
+          # archive-scan.json is a within-run handoff from --scan to --archive
+          # and is regenerated every run, so only the durable state is kept.
+          git add archive-state.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
