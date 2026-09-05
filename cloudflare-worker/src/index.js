@@ -3,7 +3,7 @@ import { verifyKey } from "discord-interactions";
 const REPO = "eist-radio/eist-tools";
 const GH_API = `https://api.github.com/repos/${REPO}/actions/workflows`;
 
-const OOPS = "oops that didn't work ¯\\_(ツ)_/¯";
+const OOPS = "oop that didn't work ¯\\_(ツ)_/¯";
 
 // Discord interaction types
 const PING = 1;
@@ -111,6 +111,6 @@ export default {
 
     if (!ok) return reply(OOPS);
 
-    return reply("Making space... I'll report back here when it's done.");
+    return reply("Making some space...");
   },
 };

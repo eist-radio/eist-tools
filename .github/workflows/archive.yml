@@ -158,11 +158,12 @@ jobs:
             echo "::warning::No Discord webhook configured."
             exit 0
           fi
-          BY=""
-          [ -n "$REQUESTED_BY" ] && BY=" (requested by $REQUESTED_BY)"
+          # A scheduled run has no requester, so the headline drops the name.
+          HEAD="Cleanup is done."
+          [ -n "$REQUESTED_BY" ] && HEAD="Cleanup requested by ${REQUESTED_BY} is done."
           # jq builds the JSON so nothing needs hand-escaping.
           jq -n \
-            --arg desc "Cleanup finished${BY}."$'\n'"**${ARCHIVED}** files archived to Drive."$'\n'"${TAGGED} tagged ready_to_delete." \
+            --arg desc "${HEAD}"$'\n'"**${ARCHIVED}** files archived to Drive."$'\n'"${TAGGED} tagged ready_to_delete." \
             '{embeds: [{description: $desc, color: 3066993}]}' \
             | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"
 
@@ -173,7 +174,7 @@ jobs:
         run: |
           [ -z "$WEBHOOK" ] && exit 0
           # Double backslash so Discord markdown renders one.
-          jq -n --arg desc 'oops that didn'"'"'t work ¯\\_(ツ)_/¯' \
+          jq -n --arg desc 'oop that didn'"'"'t work ¯\\_(ツ)_/¯' \
             '{embeds: [{description: $desc, color: 15158332}]}' \
             | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"
 
