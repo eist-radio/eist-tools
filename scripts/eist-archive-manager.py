@@ -612,6 +612,7 @@ def mode_archive(
             title = t.get("title") or t.get("filename", "?")
             mtype = t.get("_media_type", "track")
             print(f"  [{mtype}] {title} → {drive_folder}/{year}/{month}/")
+            print(f"  WOULD ARCHIVE: {title}")
         return
 
     os.makedirs(output_dir, exist_ok=True)
@@ -663,6 +664,7 @@ def mode_archive(
 
             os.remove(local_path)
             archived_count += 1
+            print(f"  ARCHIVED: {title}")
 
         except requests.HTTPError as exc:
             if exc.response is not None and exc.response.status_code == 404:
