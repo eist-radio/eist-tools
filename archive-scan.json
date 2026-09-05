@@ -1,28 +1,23 @@
 [
   {
-    "entity": "MediaTrackEntity",
-    "fileSize": 36558448,
-    "filename": "DO NOT DELETE Seán Ronayne - Wild Silence - 01 Summer on the Bog.mp3",
-    "mimeType": "audio/mpeg",
-    "uploadedBy": {
-      "firstName": "Aidan",
-      "lastName": "Reilly",
-      "id": "27ae5ba9-e106-4d2b-81f6-023024384e99"
-    },
-    "created": "2026-06-30T21:47:15.718Z",
-    "url": "https://ba3e62fff7863fad2fa0a21e5462ed18.r2.cloudflarestorage.com/station-media/eist-radio/tracks/3FsFkTpXyY5FhpI1cYyjQvPcc4K",
-    "notes": "Visit https://irishwildlifesounds.bandcamp.com",
-    "title": "Summer on the Bog",
-    "modified": "2026-09-05T08:00:01.505Z",
-    "lastPlayedIso": "2026-09-05T08:00:00.000Z",
-    "stationId": "eist-radio",
-    "album": "Wild Silence",
     "tagIds": [
       "3CoxVVPIZOuaRDbAtwG72ncKP4d",
       "3CtHRlSn34kEZq7aCAaAKpRQoIm",
       "3CwjgRRne29LWu08LuiBpB5UPoL"
     ],
-    "year": 2024,
+    "title": "Summer on the Bog",
+    "album": "Wild Silence",
+    "artist": "Seán Ronayne",
+    "entity": "MediaTrackEntity",
+    "filename": "DO NOT DELETE Seán Ronayne - Wild Silence - 01 Summer on the Bog.mp3",
+    "lastPlayedIso": "2026-09-05T08:00:00.000Z",
+    "fileSize": 36558448,
+    "created": "2026-06-30T21:47:15.718Z",
+    "url": "https://ba3e62fff7863fad2fa0a21e5462ed18.r2.cloudflarestorage.com/station-media/eist-radio/tracks/3FsFkTpXyY5FhpI1cYyjQvPcc4K",
+    "modified": "2026-09-05T08:00:01.505Z",
+    "duration": 908.51,
+    "notes": "Visit https://irishwildlifesounds.bandcamp.com",
+    "mimeType": "audio/mpeg",
     "id": "3FsFkTpXyY5FhpI1cYyjQvPcc4K",
     "artwork": {
       "128x128": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkTpXyY5FhpI1cYyjQvPcc4K-2026-06-30T21:47:18Z-128x128.jpg",
@@ -33,34 +28,29 @@
       "default": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkTpXyY5FhpI1cYyjQvPcc4K-2026-06-30T21:47:15Z-original.jpg",
       "original": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkTpXyY5FhpI1cYyjQvPcc4K-2026-06-30T21:47:15Z-original.jpg"
     },
-    "duration": 908.51,
-    "artist": "Seán Ronayne",
-    "_media_type": "track"
-  },
-  {
-    "entity": "MediaTrackEntity",
-    "lastPlayedIso": "2026-09-05T11:00:00.000Z",
-    "mimeType": "audio/mpeg",
-    "url": "https://ba3e62fff7863fad2fa0a21e5462ed18.r2.cloudflarestorage.com/station-media/eist-radio/tracks/3FsFkQbzS8dHmSzA4QchCUW49ng",
+    "stationId": "eist-radio",
     "uploadedBy": {
       "firstName": "Aidan",
       "lastName": "Reilly",
       "id": "27ae5ba9-e106-4d2b-81f6-023024384e99"
     },
-    "notes": "Visit https://irishwildlifesounds.bandcamp.com",
-    "album": "Hope",
-    "filename": "DO NOT DELETE Seán Ronayne - Hope - 06 Holm Oak Chorus.mp3",
-    "stationId": "eist-radio",
-    "created": "2026-06-30T21:47:18.903Z",
-    "modified": "2026-09-05T11:00:02.562Z",
+    "year": 2024,
+    "_media_type": "track"
+  },
+  {
+    "lastPlayedIso": "2026-09-05T11:58:44.000Z",
+    "waveformKey": "eist-radio/tracks/3FsFkQbzS8dHmSzA4QchCUW49ng.waveform.br",
+    "modified": "2026-09-05T11:58:45.557Z",
     "tagIds": [
       "3CoxVVPIZOuaRDbAtwG72ncKP4d",
       "3CtHRlSn34kEZq7aCAaAKpRQoIm",
       "3CwjgRRne29LWu08LuiBpB5UPoL"
     ],
-    "waveformKey": "eist-radio/tracks/3FsFkQbzS8dHmSzA4QchCUW49ng.waveform.br",
+    "title": "Holm Oak Chorus",
+    "artist": "Seán Ronayne",
+    "album": "Hope",
     "fileSize": 65599464,
-    "year": 2024,
+    "entity": "MediaTrackEntity",
     "artwork": {
       "128x128": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkQbzS8dHmSzA4QchCUW49ng-2026-06-30T21:47:19Z-128x128.jpg",
       "256x256": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkQbzS8dHmSzA4QchCUW49ng-2026-06-30T21:47:19Z-256x256.jpg",
@@ -70,10 +60,20 @@
       "default": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkQbzS8dHmSzA4QchCUW49ng-2026-06-30T21:47:18Z-original.jpg",
       "original": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkQbzS8dHmSzA4QchCUW49ng-2026-06-30T21:47:18Z-original.jpg"
     },
-    "duration": 1636.08,
-    "title": "Holm Oak Chorus",
+    "notes": "Visit https://irishwildlifesounds.bandcamp.com",
+    "created": "2026-06-30T21:47:18.903Z",
     "id": "3FsFkQbzS8dHmSzA4QchCUW49ng",
-    "artist": "Seán Ronayne",
+    "mimeType": "audio/mpeg",
+    "url": "https://ba3e62fff7863fad2fa0a21e5462ed18.r2.cloudflarestorage.com/station-media/eist-radio/tracks/3FsFkQbzS8dHmSzA4QchCUW49ng",
+    "duration": 1636.08,
+    "filename": "DO NOT DELETE Seán Ronayne - Hope - 06 Holm Oak Chorus.mp3",
+    "stationId": "eist-radio",
+    "uploadedBy": {
+      "firstName": "Aidan",
+      "lastName": "Reilly",
+      "id": "27ae5ba9-e106-4d2b-81f6-023024384e99"
+    },
+    "year": 2024,
     "_media_type": "track"
   },
   {
@@ -86,33 +86,33 @@
       "default": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkXozuTWnqwJDurrZIpkJMqv-2026-06-30T21:47:18Z-original.jpg",
       "original": "https://d4mt18vwj73wk.cloudfront.net/trackImage/3FsFkXozuTWnqwJDurrZIpkJMqv-2026-06-30T21:47:18Z-original.jpg"
     },
-    "entity": "MediaTrackEntity",
-    "id": "3FsFkXozuTWnqwJDurrZIpkJMqv",
-    "url": "https://ba3e62fff7863fad2fa0a21e5462ed18.r2.cloudflarestorage.com/station-media/eist-radio/tracks/3FsFkXozuTWnqwJDurrZIpkJMqv",
-    "mimeType": "audio/mpeg",
-    "uploadedBy": {
-      "lastName": "Reilly",
-      "firstName": "Aidan",
-      "id": "27ae5ba9-e106-4d2b-81f6-023024384e99"
-    },
-    "created": "2026-06-30T21:47:18.997Z",
-    "lastPlayedIso": "2026-09-05T10:59:55.000Z",
-    "notes": "Visit https://irishwildlifesounds.bandcamp.com",
-    "album": "Hope",
-    "duration": 1426.68,
-    "title": "King of the Cliff",
-    "stationId": "eist-radio",
     "tagIds": [
       "3CoxVVPIZOuaRDbAtwG72ncKP4d",
       "3CtHRlSn34kEZq7aCAaAKpRQoIm",
       "3CwjgRRne29LWu08LuiBpB5UPoL"
     ],
-    "fileSize": 57215190,
-    "waveformKey": "eist-radio/tracks/3FsFkXozuTWnqwJDurrZIpkJMqv.waveform.br",
-    "year": 2024,
-    "modified": "2026-09-05T10:59:55.649Z",
+    "url": "https://ba3e62fff7863fad2fa0a21e5462ed18.r2.cloudflarestorage.com/station-media/eist-radio/tracks/3FsFkXozuTWnqwJDurrZIpkJMqv",
     "artist": "Seán Ronayne",
     "filename": "DO NOT DELETE Seán Ronayne - Hope - 04 King of the Cliff.mp3",
+    "title": "King of the Cliff",
+    "album": "Hope",
+    "entity": "MediaTrackEntity",
+    "lastPlayedIso": "2026-09-05T11:58:45.000Z",
+    "waveformKey": "eist-radio/tracks/3FsFkXozuTWnqwJDurrZIpkJMqv.waveform.br",
+    "created": "2026-06-30T21:47:18.997Z",
+    "modified": "2026-09-05T11:58:45.696Z",
+    "notes": "Visit https://irishwildlifesounds.bandcamp.com",
+    "mimeType": "audio/mpeg",
+    "duration": 1426.68,
+    "stationId": "eist-radio",
+    "uploadedBy": {
+      "lastName": "Reilly",
+      "firstName": "Aidan",
+      "id": "27ae5ba9-e106-4d2b-81f6-023024384e99"
+    },
+    "year": 2024,
+    "fileSize": 57215190,
+    "id": "3FsFkXozuTWnqwJDurrZIpkJMqv",
     "_media_type": "track"
   }
 ]
