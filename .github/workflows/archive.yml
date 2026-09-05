@@ -165,8 +165,14 @@ jobs:
             exit 0
           fi
           # A scheduled run has no requester, so the headline drops the name.
-          HEAD="Cleanup is done."
-          [ -n "$REQUESTED_BY" ] && HEAD="Cleanup requested by ${REQUESTED_BY} is done."
+          # Discord usernames may end in a period, which reads as stray
+          # punctuation mid-sentence, so the name ends the line and any
+          # trailing dots or spaces come off.
+          HEAD="Cleanup complete"
+          if [ -n "$REQUESTED_BY" ]; then
+            NAME=$(printf '%s' "$REQUESTED_BY" | sed 's/[[:space:].]*$//')
+            HEAD="Cleanup requested by ${NAME}"
+          fi
 
           DESC="${HEAD}"$'\n'"**${ARCHIVED}** files archived to Drive."
           # List the names, capped so a big run cannot blow the embed limit.
