@@ -1,0 +1,16 @@
+{
+  "name": "eist-check-slot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "register": "node register-commands.js"
+  },
+  "dependencies": {
+    "discord-interactions": "^4.1.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

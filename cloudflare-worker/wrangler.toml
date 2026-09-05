@@ -1,9 +1,18 @@
 name = "eist-check-slot"
 main = "src/index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-11-01"
 
 [triggers]
 crons = ["50 7-23 * * *"]
 
 [observability]
 enabled = true
+
+[vars]
+# Comma-separated Discord role IDs allowed to run /cleanup.
+# Leave empty to allow anyone in the server.
+DISCORD_ALLOWED_ROLE_IDS = ""
+
+# Secrets (set with `npx wrangler secret put NAME`):
+#   GITHUB_TOKEN         fine-grained PAT, Actions:write on eist-radio/eist-tools
+#   DISCORD_PUBLIC_KEY   from the Discord application's General Information page

@@ -29,6 +29,14 @@ on:
         description: 'Preview only, change nothing'
         type: boolean
         default: true
+      notify:
+        description: 'Post the result to the Discord programming channel'
+        type: boolean
+        default: false
+      requested_by:
+        description: 'Who asked for this run (set by the /cleanup command)'
+        type: string
+        default: ''
 
   # Monthly unattended run. The keepalive workflow stops GitHub disabling this.
   schedule:
@@ -101,10 +109,24 @@ jobs:
           echo "Mode=$MODE  Weeks=$WEEKS  DryRun=$DRY" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run archive manager
+        id: run
         run: |
           echo "Free disk before run:"; df -h / | tail -1
-          python scripts/eist-archive-manager.py ${{ steps.cfg.outputs.flags }}
+          set -o pipefail
+          python scripts/eist-archive-manager.py ${{ steps.cfg.outputs.flags }} \
+            2>&1 | tee run-output.log
           echo "Free disk after run:"; df -h / | tail -1
+
+      - name: Extract counts
+        id: counts
+        if: always()
+        run: |
+          # mode_archive prints "Archived X/Y items"; mode_cleanup prints
+          # "Tagged X/Y tracks as ready_to_delete". Absent lines report as 0.
+          ARCHIVED=$(grep -oP '^Archived \K[0-9]+' run-output.log | tail -1)
+          TAGGED=$(grep -oP '^Tagged \K[0-9]+' run-output.log | tail -1)
+          echo "archived=${ARCHIVED:-0}" >> "$GITHUB_OUTPUT"
+          echo "tagged=${TAGGED:-0}" >> "$GITHUB_OUTPUT"
 
       - name: Keep Drive token warm
         if: always()
@@ -123,6 +145,38 @@ jobs:
           else
             echo "::warning::Drive token refresh returned $HTTP"
           fi
+
+      - name: Report success to Discord
+        if: success() && inputs.notify
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_PROGRAMMING_WEBHOOK || secrets.DISCORD_WEBHOOK }}
+          ARCHIVED: ${{ steps.counts.outputs.archived }}
+          TAGGED: ${{ steps.counts.outputs.tagged }}
+          REQUESTED_BY: ${{ inputs.requested_by }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "::warning::No Discord webhook configured."
+            exit 0
+          fi
+          # A scheduled run has no requester, so the headline drops the name.
+          HEAD="Cleanup is done."
+          [ -n "$REQUESTED_BY" ] && HEAD="Cleanup requested by ${REQUESTED_BY} is done."
+          # jq builds the JSON so nothing needs hand-escaping.
+          jq -n \
+            --arg desc "${HEAD}"$'\n'"**${ARCHIVED}** files archived to Drive."$'\n'"${TAGGED} tagged ready_to_delete." \
+            '{embeds: [{description: $desc, color: 3066993}]}' \
+            | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"
+
+      - name: Report failure to Discord
+        if: failure() && inputs.notify
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_PROGRAMMING_WEBHOOK || secrets.DISCORD_WEBHOOK }}
+        run: |
+          [ -z "$WEBHOOK" ] && exit 0
+          # Double backslash so Discord markdown renders one.
+          jq -n --arg desc 'oop that didn'"'"'t work ¯\\_(ツ)_/¯' \
+            '{embeds: [{description: $desc, color: 15158332}]}' \
+            | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"
 
       - name: Commit state back
         if: always() && steps.cfg.outputs.dry != 'true'

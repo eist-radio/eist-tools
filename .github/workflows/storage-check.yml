@@ -1,0 +1,130 @@
+name: Check Radiocult storage
+
+# Reports Radiocult media storage use once a day and posts to the programming
+# channel the first time it crosses the alert threshold. Staying above the
+# threshold does not re-post; the alert re-arms once usage drops back under.
+#
+# Radiocult exposes no quota endpoint, so the plan cap is supplied by the
+# cap_gb input, the RADIOCULT_STORAGE_CAP_GB repo variable, or the script
+# default of 50 GB, which is the plan hard limit. 90% of that is 45 GB, so
+# there are only about 5 GB of headroom once the alert fires.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cap_gb:
+        description: 'Radiocult plan storage cap in GB'
+        type: string
+        default: ''
+      threshold:
+        description: 'Alert threshold as a fraction of the cap'
+        type: string
+        default: '0.90'
+      force_notify:
+        description: 'Post to Discord even if the threshold was already crossed'
+        type: boolean
+        default: false
+
+  schedule:
+    # Four times a day. With a 50 GB cap the gap between the alert and the
+    # ceiling is small, so a once-daily check could miss the crossing.
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: storage-check
+  cancel-in-progress: false
+
+jobs:
+  storage-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
+      RADIOCULT_USER: ${{ secrets.RADIOCULT_USER }}
+      RADIOCULT_PW: ${{ secrets.RADIOCULT_PW }}
+      RADIOCULT_STORAGE_CAP_GB: ${{ inputs.cap_gb || vars.RADIOCULT_STORAGE_CAP_GB }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so the state commit can rebase on push
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests python-dotenv playwright
+
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Check storage
+        id: check
+        run: |
+          python scripts/eist-archive-manager.py \
+            --storage-check \
+            --alert-threshold "${{ inputs.threshold || '0.90' }}"
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Radiocult storage"
+            echo ""
+            echo "- Used: ${{ steps.check.outputs.used_gb }} GB of ${{ steps.check.outputs.cap_gb }} GB"
+            echo "- Percent: ${{ steps.check.outputs.percent }}%"
+            echo "- Media items: ${{ steps.check.outputs.item_count }}"
+            echo "- Alert due: ${{ steps.check.outputs.alert }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Notify programming channel
+        if: steps.check.outputs.alert == 'true' || inputs.force_notify
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_PROGRAMMING_WEBHOOK || secrets.DISCORD_WEBHOOK }}
+        run: |
+          [ -z "$WEBHOOK" ] && { echo "::warning::No Discord webhook configured."; exit 0; }
+          DESC="Radiocult storage is at ${{ steps.check.outputs.percent }}%\\n${{ steps.check.outputs.used_gb }} GB of ${{ steps.check.outputs.cap_gb }} GB across ${{ steps.check.outputs.item_count }} items.\\nRun \`/cleanup\` to archive and free space."
+          curl -sf -H "Content-Type: application/json" -d "{
+            \"embeds\": [{
+              \"title\": \"Storage warning\",
+              \"description\": \"$DESC\",
+              \"color\": 15158332
+            }]
+          }" "$WEBHOOK"
+
+      - name: Commit alert state back
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # State files are gitignored (*.json), so force-add.
+          git add -f storage-alert-state.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No state change to commit."
+          else
+            git commit -m "chore: update storage alert state [skip ci]"
+            for attempt in 1 2 3 4 5; do
+              if git push; then
+                echo "Pushed state on attempt $attempt."
+                break
+              fi
+              echo "Push rejected (attempt $attempt), rebasing on origin/main..."
+              git pull --rebase --autostash origin main
+              if [ "$attempt" = "5" ]; then
+                echo "::error::Could not push storage alert state after 5 attempts."
+                exit 1
+              fi
+            done
+          fi
