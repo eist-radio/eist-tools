@@ -11,6 +11,7 @@ Modes:
 - --archive    → download old media, upload to Google Drive, tag in Radiocult
 - --cleanup    → tag archived media as ready_to_delete
 - --delete     → delete media tagged ready_to_delete via the Radiocult API
+- --storage-check → report Radiocult storage use and flag when it crosses a threshold
 """
 
 import argparse
@@ -31,6 +32,13 @@ REQUIRED_GCLOUD_ACCOUNT = "eistcork@gmail.com"
 STATION_ID = "eist-radio"
 API_BASE_URL = "https://api.radiocult.fm/api/station"
 WEB_BASE_URL = "https://app.radiocult.fm"
+
+# Radiocult publishes no storage-quota endpoint, so the plan cap is supplied
+# here. The Radiocult plan hard limit is 50 GB. Override with --storage-cap-gb
+# or RADIOCULT_STORAGE_CAP_GB if the plan changes.
+DEFAULT_STORAGE_CAP_GB = 50.0
+DEFAULT_ALERT_THRESHOLD = 0.90
+STORAGE_ALERT_PATH = "storage-alert-state.json"
 
 MONTH_NAMES = [
     "", "January", "February", "March", "April", "May", "June",
@@ -853,6 +861,75 @@ def mode_delete(
 # ---------------------------------------------------------------------------
 
 
+def mode_storage_check(
+    rc: RadiocultClient,
+    cap_gb: float,
+    threshold: float,
+    alert_path: str = STORAGE_ALERT_PATH,
+) -> bool:
+    """Report total Radiocult media use and flag a fresh threshold crossing.
+
+    Returns True when an alert should be sent, meaning usage is at or above the
+    threshold and the previous check was below it. Staying above the threshold on
+    later runs does not re-alert, so a daily schedule stays quiet until the number
+    drops back under and climbs again.
+    """
+    media = rc.list_all_media()
+    used_bytes = sum(m.get("fileSize", 0) for m in media)
+    cap_bytes = cap_gb * 1024 ** 3
+    ratio = used_bytes / cap_bytes if cap_bytes else 0.0
+
+    used_gb = used_bytes / 1024 ** 3
+    pct = ratio * 100
+    n_tracks = sum(1 for m in media if m.get("_media_type") == "track")
+    n_recordings = sum(1 for m in media if m.get("_media_type") == "recording")
+
+    print(f"Media items: {len(media)} ({n_tracks} tracks, {n_recordings} recordings)")
+    print(f"Storage used: {used_gb:.2f} GB of {cap_gb:.0f} GB ({pct:.1f}%)")
+
+    was_over = False
+    if os.path.exists(alert_path):
+        try:
+            with open(alert_path, "r", encoding="utf-8") as f:
+                was_over = bool(json.load(f).get("over_threshold", False))
+        except (json.JSONDecodeError, OSError):
+            was_over = False
+
+    is_over = ratio >= threshold
+    should_alert = is_over and not was_over
+
+    with open(alert_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "over_threshold": is_over,
+                "percent": round(pct, 1),
+                "used_gb": round(used_gb, 2),
+                "cap_gb": cap_gb,
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+            },
+            f,
+            indent=2,
+        )
+
+    if is_over and was_over:
+        print(f"Still above {threshold * 100:.0f}%; already alerted, staying quiet.")
+    elif should_alert:
+        print(f"Crossed {threshold * 100:.0f}% — alert due.")
+    else:
+        print(f"Below {threshold * 100:.0f}%.")
+
+    github_output = os.getenv("GITHUB_OUTPUT")
+    if github_output:
+        with open(github_output, "a", encoding="utf-8") as f:
+            f.write(f"percent={pct:.1f}\n")
+            f.write(f"used_gb={used_gb:.2f}\n")
+            f.write(f"cap_gb={cap_gb:.0f}\n")
+            f.write(f"item_count={len(media)}\n")
+            f.write(f"alert={'true' if should_alert else 'false'}\n")
+
+    return should_alert
+
+
 def main():
     load_dotenv()
 
@@ -864,6 +941,12 @@ def main():
     parser.add_argument("--archive", action="store_true", help="Download + upload to Drive")
     parser.add_argument("--cleanup", action="store_true", help="Tag archived media as ready_to_delete")
     parser.add_argument("--delete", action="store_true", help="Delete media already tagged ready_to_delete via the API")
+    parser.add_argument("--storage-check", action="store_true", help="Report storage use and flag threshold crossings")
+    parser.add_argument("--storage-cap-gb", type=float,
+                        default=float(os.getenv("RADIOCULT_STORAGE_CAP_GB", DEFAULT_STORAGE_CAP_GB)),
+                        help=f"Radiocult plan storage cap in GB (default: {DEFAULT_STORAGE_CAP_GB:.0f})")
+    parser.add_argument("--alert-threshold", type=float, default=DEFAULT_ALERT_THRESHOLD,
+                        help="Fraction of the cap that triggers an alert (default: 0.90)")
     parser.add_argument("--weeks", type=int, default=8, help="Age threshold in weeks (default: 8)")
     parser.add_argument("--output", default="./archive-tmp", help="Temp download directory")
     parser.add_argument("--drive-folder", default="éist - archive", help="Root Google Drive folder name")
@@ -871,7 +954,9 @@ def main():
     parser.add_argument("--interactive", action="store_true", help="Show browser window")
     args = parser.parse_args()
 
-    run_all = not (args.scan or args.archive or args.cleanup or args.delete)
+    run_all = not (
+        args.scan or args.archive or args.cleanup or args.delete or args.storage_check
+    )
     if run_all:
         args.scan = True
         args.archive = True
@@ -915,6 +1000,10 @@ def main():
     if args.delete:
         rc.authenticate(headless=headless)
         mode_delete(rc, state, args.dry_run)
+
+    if args.storage_check:
+        rc.authenticate(headless=headless)
+        mode_storage_check(rc, args.storage_cap_gb, args.alert_threshold)
 
 
 if __name__ == "__main__":
