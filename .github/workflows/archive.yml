@@ -127,6 +127,12 @@ jobs:
           TAGGED=$(grep -oP '^Tagged \K[0-9]+' run-output.log | tail -1)
           echo "archived=${ARCHIVED:-0}" >> "$GITHUB_OUTPUT"
           echo "tagged=${TAGGED:-0}" >> "$GITHUB_OUTPUT"
+          # mode_archive marks each success with "  ARCHIVED: <title>", and a dry
+          # run with "  WOULD ARCHIVE: <title>". The "[i/N] <title>" line is
+          # printed before the attempt, so it names failures too and is no use here.
+          grep -oP '^  (ARCHIVED|WOULD ARCHIVE): \K.*' run-output.log \
+            > archived-names.txt || true
+          echo "Collected $(wc -l < archived-names.txt) archived names."
 
       - name: Keep Drive token warm
         if: always()
@@ -159,12 +165,32 @@ jobs:
             exit 0
           fi
           # A scheduled run has no requester, so the headline drops the name.
-          HEAD="Cleanup is done."
-          [ -n "$REQUESTED_BY" ] && HEAD="Cleanup requested by ${REQUESTED_BY} is done."
-          # jq builds the JSON so nothing needs hand-escaping.
-          jq -n \
-            --arg desc "${HEAD}"$'\n'"**${ARCHIVED}** files archived to Drive."$'\n'"${TAGGED} tagged ready_to_delete." \
-            '{embeds: [{description: $desc, color: 3066993}]}' \
+          # Discord usernames may end in a period, which reads as stray
+          # punctuation mid-sentence, so the name ends the line and any
+          # trailing dots or spaces come off.
+          HEAD="Cleanup complete"
+          if [ -n "$REQUESTED_BY" ]; then
+            NAME=$(printf '%s' "$REQUESTED_BY" | sed 's/[[:space:].]*$//')
+            HEAD="Cleanup requested by ${NAME}"
+          fi
+
+          DESC="${HEAD}"$'\n'"**${ARCHIVED}** files archived to Drive."
+          # List the names, capped so a big run cannot blow the embed limit.
+          if [ -s archived-names.txt ]; then
+            TOTAL=$(wc -l < archived-names.txt)
+            NAMES=$(head -20 archived-names.txt | sed 's/^/• /')
+            if [ "$TOTAL" -gt 20 ]; then
+              NAMES="${NAMES}"$'\n'"…and $((TOTAL - 20)) more"
+            fi
+            DESC="${DESC}"$'\n'"${NAMES}"
+          fi
+          DESC="${DESC}"$'\n'"${TAGGED} tagged ready_to_delete."
+
+          # jq builds the JSON so nothing needs hand-escaping. Discord caps an
+          # embed description at 4096 characters and rejects the whole payload
+          # over that, so the slice is a hard backstop on long titles.
+          jq -n --arg desc "$DESC" \
+            '{embeds: [{description: $desc[0:3900], color: 3066993}]}' \
             | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"
 
       - name: Report failure to Discord
