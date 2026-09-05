@@ -111,6 +111,6 @@ export default {
 
     if (!ok) return reply(OOPS);
 
-    return reply(`Cleanup started by ${requestedBy}. I'll report back here when it's done.`);
+    return reply("Making space... I'll report back here when it's done.");
   },
 };
