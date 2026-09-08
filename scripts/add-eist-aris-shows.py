@@ -612,7 +612,9 @@ class EistArisScheduler:
             media_payload["trackId"] = track_id
             media_payload["onMediaEnd"] = {"type": "underrun"}
             # Overrun must always be off for shows created by this workflow.
-            media_payload["overrun"] = {"maxOverrunDuration": 300, "enabled": False}
+            # The API stores "off" as null and rejects {"enabled": false}
+            # with a 400 Invalid input.
+            media_payload["overrun"] = None
 
         artist_ids = show.get("artist_ids") or []
 
