@@ -611,7 +611,8 @@ class EistArisScheduler:
         if track_id:
             media_payload["trackId"] = track_id
             media_payload["onMediaEnd"] = {"type": "underrun"}
-            media_payload["overrun"] = {"maxOverrunDuration": 300, "enabled": True}
+            # Overrun must always be off for shows created by this workflow.
+            media_payload["overrun"] = {"maxOverrunDuration": 300, "enabled": False}
 
         artist_ids = show.get("artist_ids") or []
 
