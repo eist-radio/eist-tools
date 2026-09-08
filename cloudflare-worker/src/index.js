@@ -14,6 +14,25 @@ const CHANNEL_MESSAGE = 4;
 
 const EPHEMERAL = 64;
 
+// Discord permission bit for ADMINISTRATOR.
+const ADMINISTRATOR = 1n << 3n;
+
+// Slash commands, each mapped to the archive.yml inputs it dispatches.
+// Register them with `npm run register` after adding one here.
+const COMMANDS = {
+  cleanup: {
+    inputs: { mode: "full", weeks: "8", dry_run: "false" },
+    ack: "Making some space...",
+  },
+  "delete-archived": {
+    // Deleting from Radiocult cannot be undone, so this one is admin-only on
+    // top of whatever DISCORD_ALLOWED_ROLE_IDS says.
+    inputs: { mode: "delete-archived", dry_run: "false" },
+    ack: "Taking out the bins...",
+    adminOnly: true,
+  },
+};
+
 function reply(content, flags = 0) {
   return Response.json({
     type: CHANNEL_MESSAGE,
@@ -36,6 +55,19 @@ async function dispatchWorkflow(env, workflow, inputs = {}) {
     console.error(`Dispatch ${workflow} failed: ${resp.status} ${body}`);
   }
   return resp.ok;
+}
+
+// Discord sends the invoking member's computed permissions with every guild
+// interaction, so this needs no role IDs and survives a role being renamed or
+// recreated. A DM has no member and so never counts as admin.
+function isAdmin(interaction) {
+  const permissions = interaction.member?.permissions;
+  if (!permissions) return false;
+  try {
+    return (BigInt(permissions) & ADMINISTRATOR) === ADMINISTRATOR;
+  } catch {
+    return false;
+  }
 }
 
 // An empty allowlist means anyone in the server can run the command.
@@ -87,7 +119,11 @@ export default {
       return Response.json({ type: PONG });
     }
 
-    if (interaction.data?.name !== "cleanup") {
+    // A plain lookup would resolve inherited keys, so a command named
+    // "constructor" or "toString" would pass this guard. Check ownership.
+    const name = interaction.data?.name;
+    const command = Object.hasOwn(COMMANDS, name) ? COMMANDS[name] : null;
+    if (!command) {
       return reply(OOPS, EPHEMERAL);
     }
 
@@ -95,22 +131,24 @@ export default {
       return reply("You don't have permission to run that.", EPHEMERAL);
     }
 
+    if (command.adminOnly && !isAdmin(interaction)) {
+      return reply("Only server admins can run that.", EPHEMERAL);
+    }
+
     const user = interaction.member?.user || interaction.user || {};
     const requestedBy = user.username || "someone";
 
-    // Discord closes the interaction after 3 seconds and a live cleanup runs
-    // far longer than that, so acknowledge now and let the workflow post the
-    // result to the programming channel webhook when it finishes.
+    // Discord closes the interaction after 3 seconds and a live run takes far
+    // longer than that, so acknowledge now and let the workflow post the result
+    // to the programming channel webhook when it finishes.
     const ok = await dispatchWorkflow(env, "archive.yml", {
-      mode: "full",
-      weeks: "8",
-      dry_run: "false",
+      ...command.inputs,
       notify: "true",
       requested_by: requestedBy,
     });
 
     if (!ok) return reply(OOPS);
 
-    return reply("Making some space...");
+    return reply(command.ack);
   },
 };

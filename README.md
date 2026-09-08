@@ -141,6 +141,9 @@ python scripts/eist-archive-manager.py --archive
 # Cleanup: delete archived media from radiocult (verifies Drive upload + checks future schedule first)
 python scripts/eist-archive-manager.py --cleanup
 
+# Delete archived: delete Drive-verified media tagged ready_to_delete and not do_not_delete
+python scripts/eist-archive-manager.py --delete-archived
+
 # Selective pipeline (preserves existing state files)
 python scripts/eist-archive-manager.py --archive --cleanup
 
@@ -151,6 +154,16 @@ python scripts/eist-archive-manager.py --archive --dry-run
 Files are uploaded to the `éist - archive` Google Drive folder, organised as `<year>/<MM - Month>/` based on upload date (e.g. `éist - archive/2026/03 - March/`).
 
 The cleanup step checks the next 12 weeks of scheduled shows and will not delete any track that is still in a future show.
+
+### Deleting tagged media
+
+`--delete-archived` reads the tags on the media itself, so a tag applied or removed in the radiocult UI counts. It deletes every track and recording carrying the `ready_to_delete` tag, except those also carrying `do_not_delete`. Tag names are matched ignoring case and separators, so `READY_TO_DELETE` and `ready to delete` both resolve.
+
+Deleting from radiocult cannot be undone, so a candidate is only removed once its Drive copy is confirmed, using the same check `--cleanup` makes before it will tag anything: `archive-state.json` must record a `drive_file_id` and that file must still be present in Drive. Media tagged by hand that the archive pipeline never uploaded has no file id to check and is reported as skipped rather than deleted. There is no flag to bypass this.
+
+If no `do_not_delete` tag exists in radiocult, the run warns and protects nothing, so create and apply that tag before running live. As with `--cleanup`, the next 12 weeks of scheduled shows are re-checked and any track still in a future show is skipped.
+
+The older `--delete` mode remains, deleting only what `archive-state.json` records as archived.
 
 ### Options
 
@@ -253,6 +266,25 @@ The `.github/workflows/check-slot.yml` workflow checks the next hour's slot and 
 **Scheduling:** GitHub Actions heavily throttles cron schedules on low-activity repos, so a Cloudflare Worker (`cloudflare-worker/`) dispatches the workflow every hour during broadcast hours (`:30` past each hour, 07:30–23:30 UTC) for reliable triggering. GitHub Actions cron runs hourly at `:07` past as a fallback. If a successful run already occurred in the last hour, the duplicate self-cancels.
 
 You can also trigger it manually from Actions → Check and fix schedule slots with an optional target datetime (Irish time).
+
+### Discord slash commands
+
+The same worker handles Discord interactions and dispatches the archive workflow:
+
+- `/cleanup` — archives radiocult media older than 8 weeks to Drive, then tags it `ready_to_delete`
+- `/delete-archived` — deletes Drive-verified media tagged `ready_to_delete` and not `do_not_delete`
+
+Both run live and post the result to the programming channel webhook when the workflow finishes.
+
+`/delete-archived` requires the ADMINISTRATOR permission. The worker reads the invoking member's computed permissions off the interaction, so there is nothing to configure and nothing to update when a role is renamed. Set `DISCORD_ALLOWED_ROLE_IDS` in `wrangler.toml` to narrow either command further; an empty value places no role restriction on top of the admin check.
+
+After adding or changing a command, re-register it with Discord and redeploy the worker:
+
+```bash
+cd cloudflare-worker
+DISCORD_APP_ID=... DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... npm run register
+npx wrangler deploy
+```
 
 #### Cloudflare Worker setup
 

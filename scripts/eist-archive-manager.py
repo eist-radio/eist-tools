@@ -11,6 +11,8 @@ Modes:
 - --archive    → download old media, upload to Google Drive, tag in Radiocult
 - --cleanup    → tag archived media as ready_to_delete
 - --delete     → delete media tagged ready_to_delete via the Radiocult API
+- --delete-archived → delete Drive-verified media whose live Radiocult tags say
+                  ready_to_delete and not do_not_delete
 - --storage-check → report Radiocult storage use and flag when it crosses a threshold
 """
 
@@ -39,6 +41,11 @@ WEB_BASE_URL = "https://app.radiocult.fm"
 DEFAULT_STORAGE_CAP_GB = 50.0
 DEFAULT_ALERT_THRESHOLD = 0.90
 STORAGE_ALERT_PATH = "storage-alert-state.json"
+
+# Radiocult media tags that drive deletion. Matched case- and separator-
+# insensitively, so READY_TO_DELETE and "ready to delete" resolve to the same tag.
+READY_TO_DELETE_TAG = "ready_to_delete"
+DO_NOT_DELETE_TAG = "do_not_delete"
 
 MONTH_NAMES = [
     "", "January", "February", "March", "April", "May", "June",
@@ -179,11 +186,27 @@ class RadiocultClient:
         resp.raise_for_status()
         return resp.json().get("tags", [])
 
-    def find_or_create_tag(self, name: str, color: str = "#998DD9") -> str:
-        tags = self.list_tags()
-        for tag in tags:
-            if tag.get("name", "").lower() == name.lower():
+    @staticmethod
+    def _normalize_tag(name: str) -> str:
+        """Fold a tag name so READY_TO_DELETE and "ready to delete" compare equal."""
+        return "".join(ch for ch in name.lower() if ch.isalnum())
+
+    def find_tag_id(self, name: str, tags: Optional[List[Dict]] = None) -> Optional[str]:
+        """Return an existing tag's id, or None. Never creates the tag.
+
+        Pass `tags` from an earlier list_tags() to resolve several names against
+        one snapshot instead of one request each.
+        """
+        target = self._normalize_tag(name)
+        for tag in tags if tags is not None else self.list_tags():
+            if self._normalize_tag(tag.get("name", "")) == target:
                 return tag["id"]
+        return None
+
+    def find_or_create_tag(self, name: str, color: str = "#998DD9") -> str:
+        existing = self.find_tag_id(name)
+        if existing:
+            return existing
         resp = self.session.post(
             f"{API_BASE_URL}/{STATION_ID}/media/tag",
             json={"name": name, "color": color},
@@ -192,10 +215,9 @@ class RadiocultClient:
         data = resp.json()
         tag_id = data.get("id") or data.get("tag", {}).get("id")
         if not tag_id:
-            tags = self.list_tags()
-            for tag in tags:
-                if tag.get("name", "").lower() == name.lower():
-                    return tag["id"]
+            created = self.find_tag_id(name)
+            if created:
+                return created
             raise RuntimeError(f"Could not create tag '{name}': {data}")
         return tag_id
 
@@ -529,6 +551,11 @@ class ArchiveStateManager:
 # ---------------------------------------------------------------------------
 
 
+def media_title(item: Dict) -> str:
+    """Best available display name for a media item."""
+    return item.get("title") or item.get("filename") or item.get("id", "?")
+
+
 def folder_for_date(created_iso: str) -> Tuple[str, str]:
     dt = datetime.fromisoformat(created_iso.replace("Z", "+00:00"))
     year = str(dt.year)
@@ -772,7 +799,7 @@ def mode_cleanup(
         return
 
     # Tag as ready_to_delete so `--delete` can pick them up in a later run
-    delete_tag_id = rc.find_or_create_tag("ready_to_delete")
+    delete_tag_id = rc.find_or_create_tag(READY_TO_DELETE_TAG)
     tagged = 0
     for tid, entry in verified.items():
         title = entry.get("title", tid)
@@ -845,17 +872,141 @@ def mode_delete(
 
     print(f"\nDeleted {deleted}/{len(to_delete)} tracks from Radiocult")
 
-    # Prune completed entries from scan file
-    scan_path = "archive-scan.json"
-    if os.path.exists(scan_path):
-        with open(scan_path, "r", encoding="utf-8") as f:
-            scan_data = json.load(f)
-        deleted_ids = {tid for tid, e in state.state.items() if e.get("status") == "deleted"}
-        pruned = [t for t in scan_data if t["id"] not in deleted_ids]
-        if len(pruned) < len(scan_data):
-            with open(scan_path, "w", encoding="utf-8") as f:
-                json.dump(pruned, f, indent=2, ensure_ascii=False)
-            print(f"Pruned {len(scan_data) - len(pruned)} completed tracks from {scan_path}")
+    prune_scan_file(state)
+
+
+def prune_scan_file(state: ArchiveStateManager, scan_path: str = "archive-scan.json") -> None:
+    """Drop entries for already-deleted media from the scan file."""
+    if not os.path.exists(scan_path):
+        return
+    with open(scan_path, "r", encoding="utf-8") as f:
+        scan_data = json.load(f)
+    deleted_ids = {tid for tid, e in state.state.items() if e.get("status") == "deleted"}
+    pruned = [t for t in scan_data if t["id"] not in deleted_ids]
+    if len(pruned) < len(scan_data):
+        with open(scan_path, "w", encoding="utf-8") as f:
+            json.dump(pruned, f, indent=2, ensure_ascii=False)
+        print(f"Pruned {len(scan_data) - len(pruned)} completed tracks from {scan_path}")
+
+
+def mode_delete_archived(
+    rc: RadiocultClient,
+    drive: GoogleDriveClient,
+    state: ArchiveStateManager,
+    dry_run: bool,
+) -> None:
+    """Delete media whose live Radiocult tags mark it ready to go.
+
+    Where --delete works from archive-state.json, this reads the tags on the
+    media itself, so a tag applied or removed in the Radiocult UI counts.
+
+    Deletion is irreversible, so every candidate must also have a Drive copy
+    recorded in archive-state.json and still present in Drive. Media tagged by
+    hand that the archive pipeline never uploaded has no file id to check and
+    is therefore never deleted here.
+    """
+    tags = rc.list_tags()
+    ready_id = rc.find_tag_id(READY_TO_DELETE_TAG, tags)
+    keep_id = rc.find_tag_id(DO_NOT_DELETE_TAG, tags)
+
+    if not ready_id:
+        print(f"No '{READY_TO_DELETE_TAG}' tag exists in Radiocult. Nothing to delete.")
+        return
+
+    # Absent the protection tag, every tagged item would look unprotected. Treat
+    # that as a misconfiguration rather than as permission to delete the lot.
+    if not keep_id:
+        print(
+            f"Error: no '{DO_NOT_DELETE_TAG}' tag exists in Radiocult, so nothing "
+            "is protected. Create and apply it before deleting.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    to_delete: List[Dict] = []
+    protected: List[Dict] = []
+    for item in rc.list_all_media():
+        tag_ids = item.get("tagIds") or []
+        if ready_id not in tag_ids:
+            continue
+        if keep_id in tag_ids:
+            protected.append(item)
+        else:
+            to_delete.append(item)
+
+    print(f"\n{len(to_delete) + len(protected)} items tagged {READY_TO_DELETE_TAG}")
+
+    if protected:
+        print(f"\n  Skipping {len(protected)} tagged {DO_NOT_DELETE_TAG}:")
+        for item in protected:
+            print(f"    {media_title(item)}")
+
+    if not to_delete:
+        print("\nNothing left to delete.")
+        return
+
+    # The tag may have been applied weeks ago, so re-check what is booked.
+    print("\nChecking future schedule (next 12 weeks)...")
+    future_track_ids = rc.get_future_track_ids(weeks_ahead=12)
+    scheduled = [item for item in to_delete if item["id"] in future_track_ids]
+    if scheduled:
+        print(f"\n  Skipping {len(scheduled)} tracks in future shows:")
+        for item in scheduled:
+            print(f"    {media_title(item)}")
+        to_delete = [item for item in to_delete if item["id"] not in future_track_ids]
+
+    if not to_delete:
+        print("\nAll tagged tracks are scheduled again. Nothing to delete.")
+        return
+
+    # Deleting from Radiocult cannot be undone, so nothing goes without a Drive
+    # copy we can still see. This is the same check --cleanup makes before it
+    # will tag anything.
+    print("\nVerifying Drive copies...")
+    verified = []
+    for item in to_delete:
+        title = media_title(item)
+        drive_file_id = (state.state.get(item["id"]) or {}).get("drive_file_id")
+        if not drive_file_id:
+            print(f"  {title}: no Drive copy recorded, skipping")
+            continue
+        if not drive.verify_file(drive_file_id):
+            print(f"  {title}: Drive copy missing, skipping", file=sys.stderr)
+            continue
+        verified.append(item)
+
+    if not verified:
+        print("\nNo tagged media has a verified Drive copy. Nothing to delete.")
+        return
+    to_delete = verified
+
+    if dry_run:
+        print(f"\n[DRY RUN] Would delete {len(to_delete)} items:")
+        for item in to_delete:
+            print(f"  WOULD DELETE: {media_title(item)}")
+        return
+
+    deleted = 0
+    for item in to_delete:
+        title = media_title(item)
+        mtype = item.get("_media_type", "track")
+        try:
+            rc.delete_media(item["id"], mtype)
+            state.mark(
+                item["id"],
+                "deleted",
+                title=title,
+                media_type=mtype,
+                deleted_at=datetime.now(timezone.utc).isoformat(),
+            )
+            deleted += 1
+            print(f"  Deleted: {title}")
+        except Exception as exc:
+            print(f"  Warning: could not delete {title}: {exc}", file=sys.stderr)
+
+    print(f"\nDeleted {deleted}/{len(to_delete)} tracks from Radiocult")
+
+    prune_scan_file(state)
 
 
 # ---------------------------------------------------------------------------
@@ -943,6 +1094,8 @@ def main():
     parser.add_argument("--archive", action="store_true", help="Download + upload to Drive")
     parser.add_argument("--cleanup", action="store_true", help="Tag archived media as ready_to_delete")
     parser.add_argument("--delete", action="store_true", help="Delete media already tagged ready_to_delete via the API")
+    parser.add_argument("--delete-archived", action="store_true",
+                        help="Delete Drive-verified media tagged ready_to_delete and not do_not_delete")
     parser.add_argument("--storage-check", action="store_true", help="Report storage use and flag threshold crossings")
     parser.add_argument("--storage-cap-gb", type=float,
                         default=float(os.getenv("RADIOCULT_STORAGE_CAP_GB", DEFAULT_STORAGE_CAP_GB)),
@@ -957,7 +1110,8 @@ def main():
     args = parser.parse_args()
 
     run_all = not (
-        args.scan or args.archive or args.cleanup or args.delete or args.storage_check
+        args.scan or args.archive or args.cleanup or args.delete
+        or args.delete_archived or args.storage_check
     )
     if run_all:
         args.scan = True
@@ -1002,6 +1156,11 @@ def main():
     if args.delete:
         rc.authenticate(headless=headless)
         mode_delete(rc, state, args.dry_run)
+
+    if args.delete_archived:
+        rc.authenticate(headless=headless)
+        drive = GoogleDriveClient()
+        mode_delete_archived(rc, drive, state, args.dry_run)
 
     if args.storage_check:
         rc.authenticate(headless=headless)

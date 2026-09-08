@@ -21,6 +21,7 @@ on:
           - scan      # list stale media only
           - archive   # download + upload to Drive
           - cleanup   # tag archived media ready_to_delete
+          - delete-archived  # delete media tagged ready_to_delete, minus do_not_delete
       weeks:
         description: 'Age threshold in weeks'
         type: string
@@ -102,10 +103,13 @@ jobs:
             scan)    FLAGS="--scan" ;;
             archive) FLAGS="--archive" ;;
             cleanup) FLAGS="--cleanup" ;;
+            delete-archived) FLAGS="--delete-archived" ;;
+            *) echo "::error::Unknown mode '$MODE'"; exit 1 ;;
           esac
           [ "$DRY" = "true" ] && FLAGS="$FLAGS --dry-run"
           echo "flags=$FLAGS --weeks $WEEKS" >> "$GITHUB_OUTPUT"
           echo "dry=$DRY" >> "$GITHUB_OUTPUT"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "Mode=$MODE  Weeks=$WEEKS  DryRun=$DRY" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run archive manager
@@ -123,16 +127,24 @@ jobs:
         run: |
           # mode_archive prints "Archived X/Y items"; mode_cleanup prints
           # "Tagged X/Y tracks as ready_to_delete". Absent lines report as 0.
+          # mode_delete_archived prints "Deleted X/Y tracks from Radiocult".
           ARCHIVED=$(grep -oP '^Archived \K[0-9]+' run-output.log | tail -1)
           TAGGED=$(grep -oP '^Tagged \K[0-9]+' run-output.log | tail -1)
+          DELETED=$(grep -oP '^Deleted \K[0-9]+' run-output.log | tail -1)
           echo "archived=${ARCHIVED:-0}" >> "$GITHUB_OUTPUT"
           echo "tagged=${TAGGED:-0}" >> "$GITHUB_OUTPUT"
+          echo "deleted=${DELETED:-0}" >> "$GITHUB_OUTPUT"
           # mode_archive marks each success with "  ARCHIVED: <title>", and a dry
           # run with "  WOULD ARCHIVE: <title>". The "[i/N] <title>" line is
           # printed before the attempt, so it names failures too and is no use here.
           grep -oP '^  (ARCHIVED|WOULD ARCHIVE): \K.*' run-output.log \
             > archived-names.txt || true
           echo "Collected $(wc -l < archived-names.txt) archived names."
+          # mode_delete_archived marks each success with "  Deleted: <title>",
+          # and a dry run with "  WOULD DELETE: <title>".
+          grep -oP '^  (Deleted|WOULD DELETE): \K.*' run-output.log \
+            > deleted-names.txt || true
+          echo "Collected $(wc -l < deleted-names.txt) deleted names."
 
       - name: Keep Drive token warm
         if: always()
@@ -156,38 +168,65 @@ jobs:
         if: success() && inputs.notify
         env:
           WEBHOOK: ${{ secrets.DISCORD_PROGRAMMING_WEBHOOK || secrets.DISCORD_WEBHOOK }}
+          MODE: ${{ steps.cfg.outputs.mode }}
+          DRY: ${{ steps.cfg.outputs.dry }}
           ARCHIVED: ${{ steps.counts.outputs.archived }}
           TAGGED: ${{ steps.counts.outputs.tagged }}
+          DELETED: ${{ steps.counts.outputs.deleted }}
           REQUESTED_BY: ${{ inputs.requested_by }}
         run: |
           if [ -z "$WEBHOOK" ]; then
             echo "::warning::No Discord webhook configured."
             exit 0
           fi
+          STATUS="complete"
+          if [ "$MODE" = "delete-archived" ]; then
+            NOUN="Deletion"
+            NAMES_FILE=deleted-names.txt
+            BODY="**${DELETED}** tracks deleted from Radiocult."
+            TAIL=""
+          else
+            NOUN="Cleanup"
+            NAMES_FILE=archived-names.txt
+            BODY="**${ARCHIVED}** files archived to Drive."
+            TAIL="${TAGGED} tagged ready_to_delete."$'\n'"Nothing was deleted from RadioCult. Run /delete-archived to delete files tagged with READY_TO_DELETE."
+          fi
+
+          if [ "$DRY" = "true" ]; then
+            COUNT=0
+            [ -s "$NAMES_FILE" ] && COUNT=$(wc -l < "$NAMES_FILE")
+            if [ "$MODE" = "delete-archived" ]; then
+              BODY="**${COUNT}** tracks would be deleted from Radiocult."
+            else
+              BODY="**${COUNT}** files would be archived to Drive."
+            fi
+            STATUS="preview"
+            TAIL="Dry run. Nothing was changed."
+          fi
+
           # A scheduled run has no requester, so the headline drops the name.
           # Discord usernames may end in a period, which reads as stray
           # punctuation mid-sentence, so the name ends the line and any
           # trailing dots or spaces come off.
-          HEAD="Cleanup complete"
+          HEAD="${NOUN} ${STATUS}"
           if [ -n "$REQUESTED_BY" ]; then
             NAME=$(printf '%s' "$REQUESTED_BY" | sed 's/[[:space:].]*$//')
-            HEAD="Cleanup requested by ${NAME}"
+            HEAD="${NOUN} ${STATUS}, requested by ${NAME}"
           fi
 
-          DESC="${HEAD}"$'\n'"**${ARCHIVED}** files archived to Drive."
+          DESC="${HEAD}"$'\n'"${BODY}"
           # List the names, capped so a big run cannot blow the embed limit.
-          if [ -s archived-names.txt ]; then
-            TOTAL=$(wc -l < archived-names.txt)
-            NAMES=$(head -20 archived-names.txt | sed 's/^/• /')
+          if [ -s "$NAMES_FILE" ]; then
+            TOTAL=$(wc -l < "$NAMES_FILE")
+            NAMES=$(head -20 "$NAMES_FILE" | sed 's/^/• /')
             if [ "$TOTAL" -gt 20 ]; then
               NAMES="${NAMES}"$'\n'"…and $((TOTAL - 20)) more"
             fi
             DESC="${DESC}"$'\n'"${NAMES}"
           fi
-          DESC="${DESC}"$'\n'"${TAGGED} tagged ready_to_delete."
-          # Cleanup only tags. Radiocult storage is unchanged until someone
-          # removes the tagged files, so spell out the manual step.
-          DESC="${DESC}"$'\n'"Nothing was deleted from RadioCult. Log in and manually delete files that have the ready_to_delete tag."
+          if [ -n "$TAIL" ]; then
+            DESC="${DESC}"$'\n'"${TAIL}"
+          fi
 
           # jq builds the JSON so nothing needs hand-escaping. Discord caps an
           # embed description at 4096 characters and rejects the whole payload
