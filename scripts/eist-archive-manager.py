@@ -11,8 +11,8 @@ Modes:
 - --archive    → download old media, upload to Google Drive, tag in Radiocult
 - --cleanup    → tag archived media as ready_to_delete
 - --delete     → delete media tagged ready_to_delete via the Radiocult API
-- --delete-archived → delete media whose live Radiocult tags say ready_to_delete
-                  and not do_not_delete
+- --delete-archived → delete Drive-verified media whose live Radiocult tags say
+                  ready_to_delete and not do_not_delete
 - --storage-check → report Radiocult storage use and flag when it crosses a threshold
 """
 
@@ -890,14 +890,19 @@ def prune_scan_file(state: ArchiveStateManager, scan_path: str = "archive-scan.j
 
 def mode_delete_archived(
     rc: RadiocultClient,
+    drive: GoogleDriveClient,
     state: ArchiveStateManager,
     dry_run: bool,
 ) -> None:
     """Delete media whose live Radiocult tags mark it ready to go.
 
     Where --delete works from archive-state.json, this reads the tags on the
-    media itself, so it also picks up anything tagged by hand in the Radiocult
-    UI or tagged by a run whose state file was lost.
+    media itself, so a tag applied or removed in the Radiocult UI counts.
+
+    Deletion is irreversible, so every candidate must also have a Drive copy
+    recorded in archive-state.json and still present in Drive. Media tagged by
+    hand that the archive pipeline never uploaded has no file id to check and
+    is therefore never deleted here.
     """
     ready_id = rc.find_tag_id(READY_TO_DELETE_TAG)
     if not ready_id:
@@ -947,6 +952,27 @@ def mode_delete_archived(
     if not to_delete:
         print("\nAll tagged tracks are scheduled again. Nothing to delete.")
         return
+
+    # Deleting from Radiocult cannot be undone, so nothing goes without a Drive
+    # copy we can still see. This is the same check --cleanup makes before it
+    # will tag anything.
+    print("\nVerifying Drive copies...")
+    verified = []
+    for item in to_delete:
+        title = media_title(item)
+        drive_file_id = (state.state.get(item["id"]) or {}).get("drive_file_id")
+        if not drive_file_id:
+            print(f"  {title}: no Drive copy recorded, skipping")
+            continue
+        if not drive.verify_file(drive_file_id):
+            print(f"  {title}: Drive copy missing, skipping", file=sys.stderr)
+            continue
+        verified.append(item)
+
+    if not verified:
+        print("\nNo tagged media has a verified Drive copy. Nothing to delete.")
+        return
+    to_delete = verified
 
     if dry_run:
         print(f"\n[DRY RUN] Would delete {len(to_delete)} items:")
@@ -1063,7 +1089,7 @@ def main():
     parser.add_argument("--cleanup", action="store_true", help="Tag archived media as ready_to_delete")
     parser.add_argument("--delete", action="store_true", help="Delete media already tagged ready_to_delete via the API")
     parser.add_argument("--delete-archived", action="store_true",
-                        help="Delete media tagged ready_to_delete and not do_not_delete in Radiocult")
+                        help="Delete Drive-verified media tagged ready_to_delete and not do_not_delete")
     parser.add_argument("--storage-check", action="store_true", help="Report storage use and flag threshold crossings")
     parser.add_argument("--storage-cap-gb", type=float,
                         default=float(os.getenv("RADIOCULT_STORAGE_CAP_GB", DEFAULT_STORAGE_CAP_GB)),
@@ -1127,7 +1153,8 @@ def main():
 
     if args.delete_archived:
         rc.authenticate(headless=headless)
-        mode_delete_archived(rc, state, args.dry_run)
+        drive = GoogleDriveClient()
+        mode_delete_archived(rc, drive, state, args.dry_run)
 
     if args.storage_check:
         rc.authenticate(headless=headless)

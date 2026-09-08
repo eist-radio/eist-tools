@@ -10,7 +10,9 @@ enabled = true
 
 [vars]
 # Comma-separated Discord role IDs allowed to run /cleanup and /delete-archived.
-# Leave empty to allow anyone in the server.
+# Leave empty to allow anyone in the server. /delete-archived additionally
+# requires the ADMINISTRATOR permission, which is checked in code and cannot be
+# switched off here.
 DISCORD_ALLOWED_ROLE_IDS = ""
 
 # Secrets (set with `npx wrangler secret put NAME`):

@@ -141,7 +141,7 @@ python scripts/eist-archive-manager.py --archive
 # Cleanup: delete archived media from radiocult (verifies Drive upload + checks future schedule first)
 python scripts/eist-archive-manager.py --cleanup
 
-# Delete archived: delete media whose radiocult tags say ready_to_delete and not do_not_delete
+# Delete archived: delete Drive-verified media tagged ready_to_delete and not do_not_delete
 python scripts/eist-archive-manager.py --delete-archived
 
 # Selective pipeline (preserves existing state files)
@@ -157,7 +157,9 @@ The cleanup step checks the next 12 weeks of scheduled shows and will not delete
 
 ### Deleting tagged media
 
-`--delete-archived` reads the tags on the media itself rather than `archive-state.json`, so it also picks up anything tagged by hand in the radiocult UI or tagged by a run whose state file was lost. It deletes every track and recording carrying the `ready_to_delete` tag, except those also carrying `do_not_delete`. Tag names are matched ignoring case and separators, so `READY_TO_DELETE` and `ready to delete` both resolve.
+`--delete-archived` reads the tags on the media itself, so a tag applied or removed in the radiocult UI counts. It deletes every track and recording carrying the `ready_to_delete` tag, except those also carrying `do_not_delete`. Tag names are matched ignoring case and separators, so `READY_TO_DELETE` and `ready to delete` both resolve.
+
+Deleting from radiocult cannot be undone, so a candidate is only removed once its Drive copy is confirmed, using the same check `--cleanup` makes before it will tag anything: `archive-state.json` must record a `drive_file_id` and that file must still be present in Drive. Media tagged by hand that the archive pipeline never uploaded has no file id to check and is reported as skipped rather than deleted. There is no flag to bypass this.
 
 If no `do_not_delete` tag exists in radiocult, the run warns and protects nothing, so create and apply that tag before running live. As with `--cleanup`, the next 12 weeks of scheduled shows are re-checked and any track still in a future show is skipped.
 
@@ -270,9 +272,11 @@ You can also trigger it manually from Actions → Check and fix schedule slots w
 The same worker handles Discord interactions and dispatches the archive workflow:
 
 - `/cleanup` — archives radiocult media older than 8 weeks to Drive, then tags it `ready_to_delete`
-- `/delete-archived` — deletes media tagged `ready_to_delete` and not `do_not_delete`
+- `/delete-archived` — deletes Drive-verified media tagged `ready_to_delete` and not `do_not_delete`
 
-Both run live and post the result to the programming channel webhook when the workflow finishes. Set `DISCORD_ALLOWED_ROLE_IDS` in `wrangler.toml` to restrict who can run them; an empty value allows anyone in the server.
+Both run live and post the result to the programming channel webhook when the workflow finishes.
+
+`/delete-archived` requires the ADMINISTRATOR permission. The worker reads the invoking member's computed permissions off the interaction, so there is nothing to configure and nothing to update when a role is renamed. Set `DISCORD_ALLOWED_ROLE_IDS` in `wrangler.toml` to narrow either command further; an empty value places no role restriction on top of the admin check.
 
 After adding or changing a command, re-register it with Discord and redeploy the worker:
 

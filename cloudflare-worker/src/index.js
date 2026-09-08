@@ -14,6 +14,9 @@ const CHANNEL_MESSAGE = 4;
 
 const EPHEMERAL = 64;
 
+// Discord permission bit for ADMINISTRATOR.
+const ADMINISTRATOR = 1n << 3n;
+
 // Slash commands, each mapped to the archive.yml inputs it dispatches.
 // Register them with `npm run register` after adding one here.
 const COMMANDS = {
@@ -22,8 +25,11 @@ const COMMANDS = {
     ack: "Making some space...",
   },
   "delete-archived": {
+    // Deleting from Radiocult cannot be undone, so this one is admin-only on
+    // top of whatever DISCORD_ALLOWED_ROLE_IDS says.
     inputs: { mode: "delete-archived", dry_run: "false" },
     ack: "Taking out the bins...",
+    adminOnly: true,
   },
 };
 
@@ -49,6 +55,19 @@ async function dispatchWorkflow(env, workflow, inputs = {}) {
     console.error(`Dispatch ${workflow} failed: ${resp.status} ${body}`);
   }
   return resp.ok;
+}
+
+// Discord sends the invoking member's computed permissions with every guild
+// interaction, so this needs no role IDs and survives a role being renamed or
+// recreated. A DM has no member and so never counts as admin.
+function isAdmin(interaction) {
+  const permissions = interaction.member?.permissions;
+  if (!permissions) return false;
+  try {
+    return (BigInt(permissions) & ADMINISTRATOR) === ADMINISTRATOR;
+  } catch {
+    return false;
+  }
 }
 
 // An empty allowlist means anyone in the server can run the command.
@@ -107,6 +126,10 @@ export default {
 
     if (!isAllowed(interaction, env)) {
       return reply("You don't have permission to run that.", EPHEMERAL);
+    }
+
+    if (command.adminOnly && !isAdmin(interaction)) {
+      return reply("Only server admins can run that.", EPHEMERAL);
     }
 
     const user = interaction.member?.user || interaction.user || {};
