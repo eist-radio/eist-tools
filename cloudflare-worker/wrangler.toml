@@ -9,7 +9,7 @@ crons = ["50 7-23 * * *"]
 enabled = true
 
 [vars]
-# Comma-separated Discord role IDs allowed to run /cleanup.
+# Comma-separated Discord role IDs allowed to run /cleanup and /delete-archived.
 # Leave empty to allow anyone in the server.
 DISCORD_ALLOWED_ROLE_IDS = ""
 

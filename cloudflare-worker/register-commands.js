@@ -1,4 +1,4 @@
-// One-off: registers the /cleanup slash command with Discord.
+// One-off: registers the /cleanup and /delete-archived slash commands with Discord.
 //   DISCORD_APP_ID=... DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... node register-commands.js
 // Guild-scoped registration appears instantly; global takes up to an hour.
 
@@ -17,6 +17,11 @@ const commands = [
   {
     name: "cleanup",
     description: "Archive old Radiocult media to Drive and free up storage",
+    type: 1,
+  },
+  {
+    name: "delete-archived",
+    description: "Delete Radiocult media tagged ready_to_delete (skips do_not_delete)",
     type: 1,
   },
 ];
