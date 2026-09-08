@@ -191,19 +191,22 @@ class RadiocultClient:
         """Fold a tag name so READY_TO_DELETE and "ready to delete" compare equal."""
         return "".join(ch for ch in name.lower() if ch.isalnum())
 
-    def find_tag_id(self, name: str) -> Optional[str]:
-        """Return an existing tag's id, or None. Never creates the tag."""
+    def find_tag_id(self, name: str, tags: Optional[List[Dict]] = None) -> Optional[str]:
+        """Return an existing tag's id, or None. Never creates the tag.
+
+        Pass `tags` from an earlier list_tags() to resolve several names against
+        one snapshot instead of one request each.
+        """
         target = self._normalize_tag(name)
-        for tag in self.list_tags():
+        for tag in tags if tags is not None else self.list_tags():
             if self._normalize_tag(tag.get("name", "")) == target:
                 return tag["id"]
         return None
 
     def find_or_create_tag(self, name: str, color: str = "#998DD9") -> str:
-        tags = self.list_tags()
-        for tag in tags:
-            if tag.get("name", "").lower() == name.lower():
-                return tag["id"]
+        existing = self.find_tag_id(name)
+        if existing:
+            return existing
         resp = self.session.post(
             f"{API_BASE_URL}/{STATION_ID}/media/tag",
             json={"name": name, "color": color},
@@ -212,10 +215,9 @@ class RadiocultClient:
         data = resp.json()
         tag_id = data.get("id") or data.get("tag", {}).get("id")
         if not tag_id:
-            tags = self.list_tags()
-            for tag in tags:
-                if tag.get("name", "").lower() == name.lower():
-                    return tag["id"]
+            created = self.find_tag_id(name)
+            if created:
+                return created
             raise RuntimeError(f"Could not create tag '{name}': {data}")
         return tag_id
 
@@ -552,7 +554,6 @@ class ArchiveStateManager:
 def media_title(item: Dict) -> str:
     """Best available display name for a media item."""
     return item.get("title") or item.get("filename") or item.get("id", "?")
-
 
 
 def folder_for_date(created_iso: str) -> Tuple[str, str]:
@@ -904,18 +905,23 @@ def mode_delete_archived(
     hand that the archive pipeline never uploaded has no file id to check and
     is therefore never deleted here.
     """
-    ready_id = rc.find_tag_id(READY_TO_DELETE_TAG)
+    tags = rc.list_tags()
+    ready_id = rc.find_tag_id(READY_TO_DELETE_TAG, tags)
+    keep_id = rc.find_tag_id(DO_NOT_DELETE_TAG, tags)
+
     if not ready_id:
         print(f"No '{READY_TO_DELETE_TAG}' tag exists in Radiocult. Nothing to delete.")
         return
 
-    keep_id = rc.find_tag_id(DO_NOT_DELETE_TAG)
+    # Absent the protection tag, every tagged item would look unprotected. Treat
+    # that as a misconfiguration rather than as permission to delete the lot.
     if not keep_id:
         print(
-            f"Warning: no '{DO_NOT_DELETE_TAG}' tag exists in Radiocult, "
-            "so no media is protected from deletion.",
+            f"Error: no '{DO_NOT_DELETE_TAG}' tag exists in Radiocult, so nothing "
+            "is protected. Create and apply it before deleting.",
             file=sys.stderr,
         )
+        sys.exit(1)
 
     to_delete: List[Dict] = []
     protected: List[Dict] = []
@@ -923,7 +929,7 @@ def mode_delete_archived(
         tag_ids = item.get("tagIds") or []
         if ready_id not in tag_ids:
             continue
-        if keep_id and keep_id in tag_ids:
+        if keep_id in tag_ids:
             protected.append(item)
         else:
             to_delete.append(item)

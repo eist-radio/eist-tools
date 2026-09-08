@@ -119,7 +119,10 @@ export default {
       return Response.json({ type: PONG });
     }
 
-    const command = COMMANDS[interaction.data?.name];
+    // A plain lookup would resolve inherited keys, so a command named
+    // "constructor" or "toString" would pass this guard. Check ownership.
+    const name = interaction.data?.name;
+    const command = Object.hasOwn(COMMANDS, name) ? COMMANDS[name] : null;
     if (!command) {
       return reply(OOPS, EPHEMERAL);
     }

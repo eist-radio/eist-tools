@@ -104,6 +104,7 @@ jobs:
             archive) FLAGS="--archive" ;;
             cleanup) FLAGS="--cleanup" ;;
             delete-archived) FLAGS="--delete-archived" ;;
+            *) echo "::error::Unknown mode '$MODE'"; exit 1 ;;
           esac
           [ "$DRY" = "true" ] && FLAGS="$FLAGS --dry-run"
           echo "flags=$FLAGS --weeks $WEEKS" >> "$GITHUB_OUTPUT"
@@ -168,6 +169,7 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DISCORD_PROGRAMMING_WEBHOOK || secrets.DISCORD_WEBHOOK }}
           MODE: ${{ steps.cfg.outputs.mode }}
+          DRY: ${{ steps.cfg.outputs.dry }}
           ARCHIVED: ${{ steps.counts.outputs.archived }}
           TAGGED: ${{ steps.counts.outputs.tagged }}
           DELETED: ${{ steps.counts.outputs.deleted }}
@@ -177,6 +179,7 @@ jobs:
             echo "::warning::No Discord webhook configured."
             exit 0
           fi
+          STATUS="complete"
           if [ "$MODE" = "delete-archived" ]; then
             NOUN="Deletion"
             NAMES_FILE=deleted-names.txt
@@ -189,14 +192,26 @@ jobs:
             TAIL="${TAGGED} tagged ready_to_delete."$'\n'"Nothing was deleted from RadioCult. Run /delete-archived to delete files tagged with READY_TO_DELETE."
           fi
 
+          if [ "$DRY" = "true" ]; then
+            COUNT=0
+            [ -s "$NAMES_FILE" ] && COUNT=$(wc -l < "$NAMES_FILE")
+            if [ "$MODE" = "delete-archived" ]; then
+              BODY="**${COUNT}** tracks would be deleted from Radiocult."
+            else
+              BODY="**${COUNT}** files would be archived to Drive."
+            fi
+            STATUS="preview"
+            TAIL="Dry run. Nothing was changed."
+          fi
+
           # A scheduled run has no requester, so the headline drops the name.
           # Discord usernames may end in a period, which reads as stray
           # punctuation mid-sentence, so the name ends the line and any
           # trailing dots or spaces come off.
-          HEAD="${NOUN} complete"
+          HEAD="${NOUN} ${STATUS}"
           if [ -n "$REQUESTED_BY" ]; then
             NAME=$(printf '%s' "$REQUESTED_BY" | sed 's/[[:space:].]*$//')
-            HEAD="${NOUN} requested by ${NAME}"
+            HEAD="${NOUN} ${STATUS}, requested by ${NAME}"
           fi
 
           DESC="${HEAD}"$'\n'"${BODY}"
