@@ -186,7 +186,7 @@ jobs:
             NOUN="Cleanup"
             NAMES_FILE=archived-names.txt
             BODY="**${ARCHIVED}** files archived to Drive."
-            TAIL="${TAGGED} tagged ready_to_delete."$'\n'"Nothing was deleted from RadioCult. Run /delete-archived to remove the tagged files."
+            TAIL="${TAGGED} tagged ready_to_delete."$'\n'"Nothing was deleted from RadioCult. Run /delete-archived to delete files tagged with READY_TO_DELETE."
           fi
 
           # A scheduled run has no requester, so the headline drops the name.
