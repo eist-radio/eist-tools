@@ -53,6 +53,24 @@ MONTH_NAMES = [
 ]
 
 
+def env_float(name: str, fallback: float) -> float:
+    """Read a float from the environment, falling back when unset or unusable.
+
+    GitHub Actions sets an env var to the empty string when the expression
+    behind it resolves to nothing, so `os.getenv(name, fallback)` hands back
+    "" instead of the fallback. A malformed value warns and falls back rather
+    than killing the run.
+    """
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return fallback
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"Ignoring {name}={raw!r}: not a number. Using {fallback}.")
+        return fallback
+
+
 # ---------------------------------------------------------------------------
 # Radiocult API client
 # ---------------------------------------------------------------------------
@@ -1098,7 +1116,7 @@ def main():
                         help="Delete Drive-verified media tagged ready_to_delete and not do_not_delete")
     parser.add_argument("--storage-check", action="store_true", help="Report storage use and flag threshold crossings")
     parser.add_argument("--storage-cap-gb", type=float,
-                        default=float(os.getenv("RADIOCULT_STORAGE_CAP_GB", DEFAULT_STORAGE_CAP_GB)),
+                        default=env_float("RADIOCULT_STORAGE_CAP_GB", DEFAULT_STORAGE_CAP_GB),
                         help=f"Radiocult plan storage cap in GB (default: {DEFAULT_STORAGE_CAP_GB:.0f})")
     parser.add_argument("--alert-threshold", type=float, default=DEFAULT_ALERT_THRESHOLD,
                         help="Fraction of the cap that triggers an alert (default: 0.90)")
