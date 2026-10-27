@@ -21,7 +21,7 @@ const ADMINISTRATOR = 1n << 3n;
 // Register them with `npm run register` after adding one here.
 const COMMANDS = {
   cleanup: {
-    inputs: { mode: "full", weeks: "8", dry_run: "false" },
+    inputs: { mode: "full", weeks: "6", dry_run: "false" },
     ack: "Making some space...",
   },
   "delete-archived": {

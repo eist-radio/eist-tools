@@ -271,7 +271,7 @@ You can also trigger it manually from Actions → Check and fix schedule slots w
 
 The same worker handles Discord interactions and dispatches the archive workflow:
 
-- `/cleanup` — archives radiocult media older than 8 weeks to Drive, then tags it `ready_to_delete`
+- `/cleanup` — archives radiocult media older than 6 weeks to Drive, then tags it `ready_to_delete`
 - `/delete-archived` — deletes Drive-verified media tagged `ready_to_delete` and not `do_not_delete`
 
 Both run live and post the result to the programming channel webhook when the workflow finishes.
