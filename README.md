@@ -271,12 +271,15 @@ You can also trigger it manually from Actions → Check and fix schedule slots w
 
 The same worker handles Discord interactions and dispatches the archive workflow:
 
-- `/cleanup` — archives radiocult media older than 8 weeks to Drive, then tags it `ready_to_delete`
+- `/cleanup` — archives radiocult media older than 6 weeks to Drive, then tags it `ready_to_delete`
 - `/delete-archived` — deletes Drive-verified media tagged `ready_to_delete` and not `do_not_delete`
 
 Both run live and post the result to the programming channel webhook when the workflow finishes.
 
-`/delete-archived` requires the ADMINISTRATOR permission. The worker reads the invoking member's computed permissions off the interaction, so there is nothing to configure and nothing to update when a role is renamed. Set `DISCORD_ALLOWED_ROLE_IDS` in `wrangler.toml` to narrow either command further; an empty value places no role restriction on top of the admin check.
+`/delete-archived` requires the ADMINISTRATOR permission or one of the roles in `DISCORD_DELETE_ROLE_IDS` in `wrangler.toml` (the Programming role).
+The admin check reads the invoking member's computed permissions off the interaction, so admins need no configuration.
+An empty `DISCORD_DELETE_ROLE_IDS` restricts the command to admins.
+Set `DISCORD_ALLOWED_ROLE_IDS` to narrow either command further. An empty value places no role restriction on top of the other checks.
 
 After adding or changing a command, re-register it with Discord and redeploy the worker:
 

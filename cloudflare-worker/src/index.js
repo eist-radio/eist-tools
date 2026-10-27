@@ -21,12 +21,13 @@ const ADMINISTRATOR = 1n << 3n;
 // Register them with `npm run register` after adding one here.
 const COMMANDS = {
   cleanup: {
-    inputs: { mode: "full", weeks: "8", dry_run: "false" },
+    inputs: { mode: "full", weeks: "6", dry_run: "false" },
     ack: "Making some space...",
   },
   "delete-archived": {
-    // Deleting from Radiocult cannot be undone, so this one is admin-only on
-    // top of whatever DISCORD_ALLOWED_ROLE_IDS says.
+    // Deleting from Radiocult cannot be undone, so on top of whatever
+    // DISCORD_ALLOWED_ROLE_IDS says, this one needs an admin or a member of
+    // one of the DISCORD_DELETE_ROLE_IDS roles.
     inputs: { mode: "delete-archived", dry_run: "false" },
     ack: "Taking out the bins...",
     adminOnly: true,
@@ -70,15 +71,28 @@ function isAdmin(interaction) {
   }
 }
 
-// An empty allowlist means anyone in the server can run the command.
-function isAllowed(interaction, env) {
-  const allowed = (env.DISCORD_ALLOWED_ROLE_IDS || "")
+function parseRoleIds(value) {
+  return (value || "")
     .split(",")
     .map((r) => r.trim())
     .filter(Boolean);
-  if (allowed.length === 0) return true;
+}
+
+function hasAnyRole(interaction, roleIds) {
   const roles = interaction.member?.roles || [];
-  return roles.some((r) => allowed.includes(r));
+  return roles.some((r) => roleIds.includes(r));
+}
+
+// An empty allowlist means anyone in the server can run the command.
+function isAllowed(interaction, env) {
+  const allowed = parseRoleIds(env.DISCORD_ALLOWED_ROLE_IDS);
+  if (allowed.length === 0) return true;
+  return hasAnyRole(interaction, allowed);
+}
+
+// An empty list leaves admin-only commands to admins alone.
+function canRunAdminOnly(interaction, env) {
+  return isAdmin(interaction) || hasAnyRole(interaction, parseRoleIds(env.DISCORD_DELETE_ROLE_IDS));
 }
 
 export default {
@@ -131,8 +145,8 @@ export default {
       return reply("You don't have permission to run that.", EPHEMERAL);
     }
 
-    if (command.adminOnly && !isAdmin(interaction)) {
-      return reply("Only server admins can run that.", EPHEMERAL);
+    if (command.adminOnly && !canRunAdminOnly(interaction, env)) {
+      return reply("Only server admins and Programming can run that.", EPHEMERAL);
     }
 
     const user = interaction.member?.user || interaction.user || {};
