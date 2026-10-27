@@ -313,13 +313,14 @@
     "archived_at": "2026-10-27T23:21:07.921787+00:00"
   },
   "3ImqBavAyiKkW3mLiZEi3ZGZd9b": {
-    "status": "archived",
+    "status": "deleted",
     "title": "260907 Five and Over",
     "filename": "260907 Five and Over.mp3",
     "created": "2026-09-02T20:14:18.780Z",
     "media_type": "track",
     "drive_file_id": "18StiOy_HFqnuhPhYaBdkzXRiP308xM3O",
-    "archived_at": "2026-10-27T23:21:33.254751+00:00"
+    "archived_at": "2026-10-27T23:21:33.254751+00:00",
+    "deleted_at": "2026-10-27T23:44:16.671396+00:00"
   },
   "3In2r5WYYLn47nXXUdrysiuOHge": {
     "status": "archived",
@@ -403,13 +404,14 @@
     "archived_at": "2026-10-27T23:24:26.385206+00:00"
   },
   "3Iu5LEicLJY9C4z8P7Abqt5OROj": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Leafy Garments - Episode 20 (August 26)",
     "filename": "20260905 - Leafy Garments - Episode 20 (August 26).mp3",
     "created": "2026-09-05T09:48:43.176Z",
     "media_type": "track",
     "drive_file_id": "1hCn9Jl9Qgd8Zd45xMkOi-7IUVpQJDRiT",
-    "archived_at": "2026-10-27T23:24:51.378097+00:00"
+    "archived_at": "2026-10-27T23:24:51.378097+00:00",
+    "deleted_at": "2026-10-27T23:44:15.449776+00:00"
   },
   "3Iu5qM2MggGeQRtNvIV2WifVwNs": {
     "status": "archived",
@@ -430,67 +432,74 @@
     "archived_at": "2026-10-27T23:25:24.999249+00:00"
   },
   "3IvJbNL3DWgnvFfF6OaFr9xuUN5": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Paul Dylan - In the Interim w / (07/09/2026)",
     "filename": "07:09.mp3",
     "created": "2026-09-05T20:13:35.251Z",
     "media_type": "track",
     "drive_file_id": "1pHnJlmWBjvdfZXvvF75Mbuw2_URTNDEA",
-    "archived_at": "2026-10-27T23:25:45.506494+00:00"
+    "archived_at": "2026-10-27T23:25:45.506494+00:00",
+    "deleted_at": "2026-10-27T23:44:14.860568+00:00"
   },
   "3IvK5z8trpMEm8RnyhXqxmql3gQ": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Ambient Hour - 04/09/26",
     "filename": "Ambient Hour - 04-09-26.mp3",
     "created": "2026-09-05T20:18:11.222Z",
     "media_type": "track",
     "drive_file_id": "1K2pqIRf__t5hiZVLO4Dwp1N5EFNv17xO",
-    "archived_at": "2026-10-27T23:25:54.109567+00:00"
+    "archived_at": "2026-10-27T23:25:54.109567+00:00",
+    "deleted_at": "2026-10-27T23:44:14.295419+00:00"
   },
   "3IwwEIdPZw2mVgnLnL1DFvwd1q5": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Small Plates w/ Cal - (06.09.26)",
     "filename": "Eist.mp3",
     "created": "2026-09-06T10:01:23.052Z",
     "media_type": "track",
     "drive_file_id": "1buVwigMDveKR-DTTMJ5FlRHkE5p0LL71",
-    "archived_at": "2026-10-27T23:26:21.094674+00:00"
+    "archived_at": "2026-10-27T23:26:21.094674+00:00",
+    "deleted_at": "2026-10-27T23:44:13.862405+00:00"
   },
   "3IxDCI9rYf9nyQKMfhKeC9n7ol3": {
-    "status": "archived",
+    "status": "deleted",
     "title": "nomadology ep13 260906",
     "filename": "nomadology ep13 260906.mp3",
     "created": "2026-09-06T12:20:25.516Z",
     "media_type": "track",
     "drive_file_id": "1a7Ia3WlVTsLtaRDGV13e5WxhqyGlX1fU",
-    "archived_at": "2026-10-27T23:26:52.393894+00:00"
+    "archived_at": "2026-10-27T23:26:52.393894+00:00",
+    "deleted_at": "2026-10-27T23:44:13.400080+00:00"
   },
   "3Iy3KOQ0GbpuVQ8dMU3aTTt1jdr": {
-    "status": "archived",
+    "status": "deleted",
     "title": "11.9.26",
     "filename": "11.9.26.mp3",
     "created": "2026-09-06T19:30:24.192Z",
     "media_type": "track",
     "drive_file_id": "1fwhEehysT09d6IJQUhx75t14CeFtXQpZ",
-    "archived_at": "2026-10-27T23:27:14.109390+00:00"
+    "archived_at": "2026-10-27T23:27:14.109390+00:00",
+    "deleted_at": "2026-10-27T23:44:12.894275+00:00"
   },
   "3Iy8F8bH6y2jzaum0485tHQg9Bc": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Hi Fi Hide and Seek 10 09 2026",
     "filename": "Hi Fi Hide and Seek 10 09 2026.mp3",
     "created": "2026-09-06T20:12:25.328Z",
     "media_type": "track",
     "drive_file_id": "1N77Y9Zdr93ClFqQKqsTwZk-rFCQQ44jp",
-    "archived_at": "2026-10-27T23:27:40.401257+00:00"
+    "archived_at": "2026-10-27T23:27:40.401257+00:00",
+    "deleted_at": "2026-10-27T23:44:12.497571+00:00"
   },
   "3IyIvzUw9VDo41MjmABkPicCHPA": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Phil Hope Under A Plastic Cloud 07/09/2026",
     "filename": "show31 - 7th Sept.mp3",
     "created": "2026-09-06T21:43:26.440Z",
     "media_type": "track",
     "drive_file_id": "1Q5VKoqAluaN-NyD1FQH4eh9B65iki4vA",
-    "archived_at": "2026-10-27T23:28:06.865306+00:00"
+    "archived_at": "2026-10-27T23:28:06.865306+00:00",
+    "deleted_at": "2026-10-27T23:44:06.978794+00:00"
   },
   "3J0r21G86mBgduVHLRxdKu7gKtX": {
     "status": "archived",
@@ -502,256 +511,284 @@
     "archived_at": "2026-10-27T23:28:33.568687+00:00"
   },
   "3J0vkPcwUirTDNs2UMbXR2PQATO": {
-    "status": "archived",
+    "status": "deleted",
     "title": "ApocaLipstick Vol. 7",
     "filename": "ApocaLipstick Vol. 7 FINAL.mp3",
     "created": "2026-09-07T20:07:41.944Z",
     "media_type": "track",
     "drive_file_id": "16fffrslm5P2mGZGYwMlPf0c9y9OBbQBw",
-    "archived_at": "2026-10-27T23:28:43.423655+00:00"
+    "archived_at": "2026-10-27T23:28:43.423655+00:00",
+    "deleted_at": "2026-10-27T23:44:06.485267+00:00"
   },
   "3J27wQA0VCr1Q9vyhq0HBPp2zBe": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Domhan 19 - Paul Scannell - 13.09.26",
     "filename": "Domhan 19.mp3",
     "created": "2026-09-08T06:07:55.829Z",
     "media_type": "track",
     "drive_file_id": "1HBQDk4xES92EDxWzU-szKpJyuL_FuGSY",
-    "archived_at": "2026-10-27T23:29:20.733770+00:00"
+    "archived_at": "2026-10-27T23:29:20.733770+00:00",
+    "deleted_at": "2026-10-27T23:44:05.996005+00:00"
   },
   "3J2YYgoKweY56ggiY5ox6GKYyCY": {
-    "status": "archived",
+    "status": "deleted",
     "title": "260908 [O Bheal go Beal]",
     "filename": "260910 [O Bheal go Beal].mp3",
     "created": "2026-09-08T09:45:05.681Z",
     "media_type": "track",
     "drive_file_id": "1qT2T26Be9gFlyGheDOHX8EA_T3rJ7rpD",
-    "archived_at": "2026-10-27T23:29:58.554457+00:00"
+    "archived_at": "2026-10-27T23:29:58.554457+00:00",
+    "deleted_at": "2026-10-27T23:44:05.593378+00:00"
   },
   "3J2hJbeM6sjVmGOY8OpnjvQRCW8": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Oxbow Lakes Sept '26 master",
     "filename": "Oxbow Lakes Sept '26 master.mp3",
     "created": "2026-09-08T11:37:51.751Z",
     "media_type": "track",
     "drive_file_id": "1dioIy4MNPP4_FpFyu0bV75-wPDRuAGhK",
-    "archived_at": "2026-10-27T23:30:15.718950+00:00"
+    "archived_at": "2026-10-27T23:30:15.718950+00:00",
+    "deleted_at": "2026-10-27T23:44:05.196542+00:00"
   },
   "3J3EnwO9nMO5nLfScktlGacgVh7": {
-    "status": "archived",
+    "status": "deleted",
     "title": "The Animal - Pink_Noise_061 (260909)",
     "filename": "260909 Pink_Noise_061.mp3",
     "created": "2026-09-08T15:32:22.549Z",
     "media_type": "track",
     "drive_file_id": "1tTWsfTBB1h2q6RYYH5kpSiAb2f1Fr1N3",
-    "archived_at": "2026-10-27T23:30:34.686657+00:00"
+    "archived_at": "2026-10-27T23:30:34.686657+00:00",
+    "deleted_at": "2026-10-27T23:44:04.760290+00:00"
   },
   "3J3LM5RmlRqDo0MMEwmbx2ecImn": {
-    "status": "archived",
+    "status": "deleted",
     "title": "TRP08 pre record",
     "filename": "TRP08 pre record.mp3",
     "created": "2026-09-08T16:27:52.794Z",
     "media_type": "track",
     "drive_file_id": "12ByFimlFqdH0dYKVJ6K7bPCaasBRZXVP",
-    "archived_at": "2026-10-27T23:31:03.797803+00:00"
+    "archived_at": "2026-10-27T23:31:03.797803+00:00",
+    "deleted_at": "2026-10-27T23:44:04.353310+00:00"
   },
   "3J3MQ6edZpbKrS5wYPYTAF2aFTj": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Damhsa March 2026",
     "filename": "Damhsa March 2026.mp3",
     "created": "2026-09-08T16:35:08.288Z",
     "media_type": "track",
     "drive_file_id": "1TJuj6qmFPa42eYnTo9yN0T8D_S-dhPIa",
-    "archived_at": "2026-10-27T23:31:19.116231+00:00"
+    "archived_at": "2026-10-27T23:31:19.116231+00:00",
+    "deleted_at": "2026-10-27T23:44:03.912777+00:00"
   },
   "3J3ow2ZyTVy96gniS9sVKeQweAb": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Good Boy Beats EP 11",
     "filename": "good boy beat ep 11.mp3",
     "created": "2026-09-08T20:29:37.875Z",
     "media_type": "track",
     "drive_file_id": "1vBeiV0PHbrU9wZFuqiBpqOo1GTDME3Ty",
-    "archived_at": "2026-10-27T23:31:37.441826+00:00"
+    "archived_at": "2026-10-27T23:31:37.441826+00:00",
+    "deleted_at": "2026-10-27T23:44:03.399537+00:00"
   },
   "3J3uPicRRvZMFnXfdDqThwPfO60": {
-    "status": "archived",
+    "status": "deleted",
     "title": "260912 I❤Weirdos #1",
     "filename": "260912 I❤Weirdos #1.mp3",
     "created": "2026-09-08T21:14:48.683Z",
     "media_type": "track",
     "drive_file_id": "13mCG2OE0W_LCZ_FtJMrL0AcZ3fnv9EVy",
-    "archived_at": "2026-10-27T23:31:54.382400+00:00"
+    "archived_at": "2026-10-27T23:31:54.382400+00:00",
+    "deleted_at": "2026-10-27T23:44:02.956879+00:00"
   },
   "3J3v78ePgVVTPLI3mcv9KQbYUB5": {
-    "status": "archived",
+    "status": "deleted",
     "title": "DJ Dulci - September 2026",
     "filename": "DJ Dulci - September 2026.mp3",
     "created": "2026-09-08T21:22:35.556Z",
     "media_type": "track",
     "drive_file_id": "1-ptll60MhRYrj9IKsRK8a8Yj5SiLHE-k",
-    "archived_at": "2026-10-27T23:32:09.715788+00:00"
+    "archived_at": "2026-10-27T23:32:09.715788+00:00",
+    "deleted_at": "2026-10-27T23:44:02.520659+00:00"
   },
   "3J4ReajyqSgBFmSk8mYYBFO3omv": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Tús Maith le Julie Landers",
     "filename": "01_REC_2026_09_09_converted_by_soundandgo.com_.mp3",
     "created": "2026-09-09T01:48:30.703Z",
     "media_type": "track",
     "drive_file_id": "1-1BCyrEnjAvEXzXfYgnUMHIGtHcVHRWK",
-    "archived_at": "2026-10-27T23:32:45.512106+00:00"
+    "archived_at": "2026-10-27T23:32:45.512106+00:00",
+    "deleted_at": "2026-10-27T23:44:02.098907+00:00"
   },
   "3J5MnxrPl1mt8Vf1nnGr0dW7BE4": {
-    "status": "archived",
+    "status": "deleted",
     "title": "260909 Radio Cabra",
     "filename": "260909 Radio Cabra.mp3",
     "created": "2026-09-09T09:37:53.308Z",
     "media_type": "track",
     "drive_file_id": "1n2_EoInaDrJegGqfM5TVRfxESI-lfw_Q",
-    "archived_at": "2026-10-27T23:33:08.242823+00:00"
+    "archived_at": "2026-10-27T23:33:08.242823+00:00",
+    "deleted_at": "2026-10-27T23:44:01.672337+00:00"
   },
   "3J5laUeU7tpt1TXryjKfharbg4Y": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Mosaic 4",
     "filename": "mosaic 4 full episode.mp3",
     "created": "2026-09-09T13:01:31.353Z",
     "media_type": "track",
     "drive_file_id": "1qJK7Pqkgj7Sw4b6SlQ81UJUQU1oROqJ0",
-    "archived_at": "2026-10-27T23:33:23.983816+00:00"
+    "archived_at": "2026-10-27T23:33:23.983816+00:00",
+    "deleted_at": "2026-10-27T23:44:01.252850+00:00"
   },
   "3J5ldj6mOozh3dvKQ5TQ26YDsy1": {
-    "status": "archived",
+    "status": "deleted",
     "title": "MOSAIC ARTHURITIS",
     "filename": "MOSAIC ARTHURITIS.mp3",
     "created": "2026-09-09T13:01:57.054Z",
     "media_type": "track",
     "drive_file_id": "1-dahaHWgeMfb2lGoF0nTCzrt-xBr5j-o",
-    "archived_at": "2026-10-27T23:33:44.137317+00:00"
+    "archived_at": "2026-10-27T23:33:44.137317+00:00",
+    "deleted_at": "2026-10-27T23:44:00.765326+00:00"
   },
   "3J5l3kRaWqFOJHX8CHal9QIxlqS": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Condense(d) episode 23 09/09/2026",
     "filename": "09092026.mp3",
     "created": "2026-09-09T13:05:28.067Z",
     "media_type": "track",
     "drive_file_id": "1Br1qzq6czz9E8fb0HxhnjX-f-gYN07DU",
-    "archived_at": "2026-10-27T23:33:54.467159+00:00"
+    "archived_at": "2026-10-27T23:33:54.467159+00:00",
+    "deleted_at": "2026-10-27T23:44:00.207018+00:00"
   },
   "3J6DPBMZiXWpUKXboRjH2QL4YbE": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Caribbean Voyage 19",
     "filename": "Caribbean Voyage 19.mp3",
     "created": "2026-09-09T16:51:00.693Z",
     "media_type": "track",
     "drive_file_id": "1BbkLzf5rBupq92U8FTyzH77CmTA99GDi",
-    "archived_at": "2026-10-27T23:34:23.997457+00:00"
+    "archived_at": "2026-10-27T23:34:23.997457+00:00",
+    "deleted_at": "2026-10-27T23:43:59.531061+00:00"
   },
   "3J6QOS7yKSzsvv3LeXHtMoCW2Ua": {
-    "status": "archived",
+    "status": "deleted",
     "title": "20260910 - Rush Hour",
     "filename": "20260910 - Rush Hour.mp3",
     "created": "2026-09-09T18:37:56.526Z",
     "media_type": "track",
     "drive_file_id": "18TSB2dZq2FaMVC1x6WcSkyg_8V3F0-rt",
-    "archived_at": "2026-10-27T23:34:47.209662+00:00"
+    "archived_at": "2026-10-27T23:34:47.209662+00:00",
+    "deleted_at": "2026-10-27T23:43:59.075400+00:00"
   },
   "3J7RwP5y0HzOtfoAAOkYGkzzP21": {
-    "status": "archived",
+    "status": "deleted",
     "title": "cold air",
     "filename": "This the one .mp3",
     "created": "2026-09-10T03:20:12.375Z",
     "media_type": "track",
     "drive_file_id": "1bYDeSLMAEJHqimBqE2Bq6pYjxWEewpgg",
-    "archived_at": "2026-10-27T23:34:54.770407+00:00"
+    "archived_at": "2026-10-27T23:34:54.770407+00:00",
+    "deleted_at": "2026-10-27T23:43:58.672668+00:00"
   },
   "3J7ykNL9vmKG2tyYtZoqCA8ZTJg": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Infinite details - 100926",
     "filename": "INFEDEETSSEPT.mp3",
     "created": "2026-09-10T07:49:20.317Z",
     "media_type": "track",
     "drive_file_id": "1va_Q_CUQXJTpHrjkeof7vp97cydZgQhM",
-    "archived_at": "2026-10-27T23:35:08.714183+00:00"
+    "archived_at": "2026-10-27T23:35:08.714183+00:00",
+    "deleted_at": "2026-10-27T23:43:58.244234+00:00"
   },
   "3J91xVxb5bGxyHmqR3PpD0apb4n": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Paul Dylan - In the Interim w / (11/09/2026)",
     "filename": "11:09.mp3",
     "created": "2026-09-10T16:45:39.969Z",
     "media_type": "track",
     "drive_file_id": "1pH_asqSIaT5EbTsWoVzb-rUPfwApK6vN",
-    "archived_at": "2026-10-27T23:35:28.071404+00:00"
+    "archived_at": "2026-10-27T23:35:28.071404+00:00",
+    "deleted_at": "2026-10-27T23:43:57.844853+00:00"
   },
   "3J9LKI6XC1XGgo2mzhkxNWr7Ash": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Feed Me Weird Things 10/09/2026",
     "filename": "fmwt.mp3",
     "created": "2026-09-10T19:25:00.563Z",
     "media_type": "track",
     "drive_file_id": "18XJD0H4zhRU4jmj8_OR8K8bwKf7rHsze",
-    "archived_at": "2026-10-27T23:35:42.945507+00:00"
+    "archived_at": "2026-10-27T23:35:42.945507+00:00",
+    "deleted_at": "2026-10-27T23:43:57.431086+00:00"
   },
   "3JAHQYoh78KF8ok6lOKK8fPnJ7r": {
-    "status": "archived",
+    "status": "deleted",
     "title": "260912 l ❤ weirdos ep1",
     "filename": "260912 l ❤ weirdos ep1.mp3",
     "created": "2026-09-11T03:23:34.708Z",
     "media_type": "track",
     "drive_file_id": "1lNvd-iTuTh5HxjihZJwVT5liQFsIQcRP",
-    "archived_at": "2026-10-27T23:35:59.567731+00:00"
+    "archived_at": "2026-10-27T23:35:59.567731+00:00",
+    "deleted_at": "2026-10-27T23:43:57.038674+00:00"
   },
   "3JCQ0tDW0HnTfzcfkU4Eo6mHskl": {
-    "status": "archived",
+    "status": "deleted",
     "title": "260915 DEEPERCUTS",
     "filename": "260915 DEEPERCUTS.mp3",
     "created": "2026-09-11T21:33:17.840Z",
     "media_type": "track",
     "drive_file_id": "1PpzMOpz9PNnwcve3Im0xsgaX9bqUdV4B",
-    "archived_at": "2026-10-27T23:36:18.302240+00:00"
+    "archived_at": "2026-10-27T23:36:18.302240+00:00",
+    "deleted_at": "2026-10-27T23:43:56.608132+00:00"
   },
   "3JCiF3la5pT6xfKg3XVxa3ZpwdC": {
-    "status": "archived",
+    "status": "deleted",
     "title": "160926 Radio KiN",
     "filename": "radio kin 1 2.mp3",
     "created": "2026-09-12T00:03:18.406Z",
     "media_type": "track",
     "drive_file_id": "1YgUoYkp30cvnnElptGgBL6maNSTq8F-T",
-    "archived_at": "2026-10-27T23:36:26.930340+00:00"
+    "archived_at": "2026-10-27T23:36:26.930340+00:00",
+    "deleted_at": "2026-10-27T23:43:55.802482+00:00"
   },
   "3JCj8pTYhU10H0VrCH8HbVBgIhj": {
-    "status": "archived",
+    "status": "deleted",
     "title": "radio kin 1 2",
     "filename": "radio kin 1 2.mp3",
     "created": "2026-09-12T00:10:39.746Z",
     "media_type": "track",
     "drive_file_id": "1YgUoYkp30cvnnElptGgBL6maNSTq8F-T",
-    "archived_at": "2026-10-27T23:36:32.040313+00:00"
+    "archived_at": "2026-10-27T23:36:32.040313+00:00",
+    "deleted_at": "2026-10-27T23:43:55.378670+00:00"
   },
   "3JDflWBNse7vPmPhIdQx2IAuJCy": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Serato Recording 3",
     "filename": "mercy salvation -MFSS0912.mp3",
     "created": "2026-09-12T08:12:08.041Z",
     "media_type": "track",
     "drive_file_id": "1xUXl3ttDImN2n0Z1JF_e0WViIwerVNeZ",
-    "archived_at": "2026-10-27T23:36:41.731759+00:00"
+    "archived_at": "2026-10-27T23:36:41.731759+00:00",
+    "deleted_at": "2026-10-27T23:43:54.983187+00:00"
   },
   "3JH8aftQKwPAopENmtgvyA0nN1i": {
-    "status": "archived",
+    "status": "deleted",
     "title": "radio kaka 140926",
     "filename": "RKK 140926.mp3",
     "created": "2026-09-13T13:38:43.875Z",
     "media_type": "track",
     "drive_file_id": "1kKpXfiWo2ZLAvr34WSX_xCZxubQr9Ucc",
-    "archived_at": "2026-10-27T23:36:58.516787+00:00"
+    "archived_at": "2026-10-27T23:36:58.516787+00:00",
+    "deleted_at": "2026-10-27T23:43:54.570539+00:00"
   },
   "3JHpmHrd1Eei0LiLlr0Mrm36bZd": {
-    "status": "archived",
+    "status": "deleted",
     "title": "20260916 Night Music Ep. 11",
     "filename": "20260916 Night Music Ep. 11.mp3",
     "created": "2026-09-13T19:39:27.429Z",
     "media_type": "track",
     "drive_file_id": "1H6jFJJufAk8rZShI2QsxSbXB2_au5FnG",
-    "archived_at": "2026-10-27T23:37:25.775464+00:00"
+    "archived_at": "2026-10-27T23:37:25.775464+00:00",
+    "deleted_at": "2026-10-27T23:43:54.155943+00:00"
   },
   "3JJwhryrp3oMwzS8ZRhmRbESxJf": {
     "status": "archived",
@@ -763,22 +800,24 @@
     "archived_at": "2026-10-27T23:37:50.681981+00:00"
   },
   "3JKKY9RbXKD3p2sFZxnpqFUUdDE": {
-    "status": "archived",
+    "status": "deleted",
     "title": "City of Synths ",
     "filename": "Apartment Records - Americhord - First Light.mp3",
     "created": "2026-09-14T16:48:50.429Z",
     "media_type": "track",
     "drive_file_id": "1EVk5v8Grj0JfiBpvJukyYAG9m_12ioYc",
-    "archived_at": "2026-10-27T23:38:08.442098+00:00"
+    "archived_at": "2026-10-27T23:38:08.442098+00:00",
+    "deleted_at": "2026-10-27T23:43:53.696870+00:00"
   },
   "3JKVw8vmcsieA8Hfcq37PwGQ38B": {
-    "status": "archived",
+    "status": "deleted",
     "title": "015_Living Rhythms_Granular",
     "filename": "015_Living Rhythms_Granular.mp3",
     "created": "2026-09-14T18:21:22.667Z",
     "media_type": "track",
     "drive_file_id": "1CtDRZeHxCg2XlhFSREGT3420kxAsknZW",
-    "archived_at": "2026-10-27T23:38:44.040635+00:00"
+    "archived_at": "2026-10-27T23:38:44.040635+00:00",
+    "deleted_at": "2026-10-27T23:43:53.252551+00:00"
   },
   "3JKX3kHzWJ1rpGwFlCSthT1UeS8": {
     "status": "archived",
@@ -790,30 +829,33 @@
     "archived_at": "2026-10-27T23:38:56.382748+00:00"
   },
   "3JKzGAXGMDpvzVIYG0paKYUXeaH": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Lost Wax 1 storytelling",
     "filename": "Lost Wax 1 storytelling.mp3",
     "created": "2026-09-14T22:22:25.850Z",
     "media_type": "track",
     "drive_file_id": "1URnsLJRgUbvPf2F_eWlRiFRXcE26HLR3",
-    "archived_at": "2026-10-27T23:39:24.248490+00:00"
+    "archived_at": "2026-10-27T23:39:24.248490+00:00",
+    "deleted_at": "2026-10-27T23:43:52.786753+00:00"
   },
   "3JNbS8oayaMZLysPHdNL771uAMp": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Pathetic Fallacy",
     "filename": "270916 Clara's PatheticFallacy.mp3",
     "created": "2026-09-15T20:34:57.520Z",
     "media_type": "track",
     "drive_file_id": "1bD0p4LbQMQwGEgVmr98-zOsZ7MOd3dPG",
-    "archived_at": "2026-10-27T23:39:38.774390+00:00"
+    "archived_at": "2026-10-27T23:39:38.774390+00:00",
+    "deleted_at": "2026-10-27T23:43:52.361634+00:00"
   },
   "3JNdcFM47yftwoBuznCfpqNf6aM": {
-    "status": "archived",
+    "status": "deleted",
     "title": "260915-the-ports-of-the-archipelago",
     "filename": "260915-the-ports-of-the-archipelago.mp3",
     "created": "2026-09-15T20:52:47.472Z",
     "media_type": "track",
     "drive_file_id": "1HutBZujKnl8ArWVAfAnsTHkAzoiqmFzg",
-    "archived_at": "2026-10-27T23:39:55.069854+00:00"
+    "archived_at": "2026-10-27T23:39:55.069854+00:00",
+    "deleted_at": "2026-10-27T23:43:51.968009+00:00"
   }
 }
