@@ -16,7 +16,7 @@ DISCORD_ALLOWED_ROLE_IDS = ""
 # Comma-separated Discord role IDs that can run /delete-archived without the
 # ADMINISTRATOR permission (the Programming role). Admins can always run it.
 # Leave empty to restrict it to admins.
-DISCORD_DELETE_ROLE_IDS = ""
+DISCORD_DELETE_ROLE_IDS = "1311436981397487670"
 
 # Secrets (set with `npx wrangler secret put NAME`):
 #   GITHUB_TOKEN         fine-grained PAT, Actions:write on eist-radio/eist-tools
