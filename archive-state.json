@@ -239,13 +239,14 @@
     "archived_at": "2026-10-27T22:11:58.164096+00:00"
   },
   "3Iiq9bJeAYNsu7suqahgJWSCHKG": {
-    "status": "archived",
+    "status": "deleted",
     "title": "DAD17 - 01:09:2026, 11.04",
     "filename": "DAD17 - 01:09:2026, 11.04.mp3",
     "created": "2026-09-01T10:13:19.893Z",
     "media_type": "track",
     "drive_file_id": "1Ba7qHjxed0Y7EjngklDpI6UmqagsL1mY",
-    "archived_at": "2026-10-27T22:12:11.384365+00:00"
+    "archived_at": "2026-10-27T22:12:11.384365+00:00",
+    "deleted_at": "2026-10-27T22:59:34.045593+00:00"
   },
   "3IizwmWAbBB3Cib4RJUqIzfA4t2": {
     "status": "archived",
@@ -257,12 +258,13 @@
     "archived_at": "2026-10-27T22:12:14.664320+00:00"
   },
   "3IjqmimQUoCCROhaafWlZ4CbZP1": {
-    "status": "archived",
+    "status": "deleted",
     "title": "Solar Feelings September_260901",
     "filename": "Solar Feelings September_260901.mp3",
     "created": "2026-09-01T18:49:22.523Z",
     "media_type": "track",
     "drive_file_id": "1fyVYUdoBtkZtTHj3rOX7vjC8-NRLi0mf",
-    "archived_at": "2026-10-27T22:12:26.960140+00:00"
+    "archived_at": "2026-10-27T22:12:26.960140+00:00",
+    "deleted_at": "2026-10-27T22:59:33.597462+00:00"
   }
 }
