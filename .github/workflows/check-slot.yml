@@ -23,6 +23,7 @@ concurrency:
 jobs:
   check-slot:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     env:
       API_KEY: ${{ secrets.API_KEY }}
@@ -85,7 +86,13 @@ jobs:
       - name: Check and fix slot
         id: check
         run: |
-          OUTPUT=$(python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless 2>&1 | tee /dev/stderr)
+          # Without pipefail the step takes tee's exit code and a failed
+          # script goes green. Capture the script's status and re-raise it
+          # after the outputs are written.
+          set +e
+          OUTPUT=$(set -o pipefail; python scripts/add-eist-aris-shows.py "${{ steps.datetime.outputs.target_datetime }}" --check-slot --headless 2>&1 | tee /dev/stderr)
+          STATUS=$?
+          set -e
           if echo "$OUTPUT" | grep -q '✓ SUCCESS: Created'; then
             echo "fixed=true" >> $GITHUB_OUTPUT
             CREATED=$(echo "$OUTPUT" | grep -oP -- "- '\K[^']+" | paste -sd ', ')
@@ -95,6 +102,7 @@ jobs:
           else
             echo "fixed=false" >> $GITHUB_OUTPUT
           fi
+          exit $STATUS
 
       - name: Upload error screenshots
         if: failure()
@@ -105,7 +113,7 @@ jobs:
           retention-days: 7
 
       - name: Notify Discord
-        if: steps.check.outputs.fixed == 'true' && env.DISCORD_WEBHOOK != ''
+        if: always() && steps.check.outputs.fixed == 'true' && env.DISCORD_WEBHOOK != ''
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |

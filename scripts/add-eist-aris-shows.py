@@ -36,6 +36,9 @@ IRISH_TZ = ZoneInfo("Europe/Dublin")
 BROADCAST_START_HOUR = 9
 BROADCAST_END_HOUR = 24
 
+# Seconds to wait for the Radiocult API before giving up on a request.
+REQUEST_TIMEOUT = 30
+
 
 def save_json(data, default_filename: str, output_path: Optional[str] = None) -> str:
     """Write JSON to disk, returning the path used."""
@@ -146,7 +149,7 @@ class EistArisScheduler:
 
                 # Verify authentication
                 test_url = f"{API_BASE_URL}/{STATION_ID}/media/track"
-                resp = self.session.get(test_url)
+                resp = self.session.get(test_url, timeout=REQUEST_TIMEOUT)
 
                 if resp.status_code == 401:
                     print("Authentication failed - API returned 401", file=sys.stderr)
@@ -182,8 +185,15 @@ class EistArisScheduler:
                 print(f"Retrying in {delay}s...", file=sys.stderr)
                 time.sleep(delay)
 
-    def fetch_schedule(self, start_date: datetime, end_date: datetime) -> List[Dict]:
-        """Fetch schedule items in a date range."""
+    def fetch_schedule(
+        self, start_date: datetime, end_date: datetime, raise_on_error: bool = False
+    ) -> List[Dict]:
+        """Fetch schedule items in a date range.
+
+        A failed request returns an empty list by default. Callers that act on
+        an empty schedule must pass raise_on_error=True, otherwise an API
+        outage is indistinguishable from an empty slot.
+        """
         start_str = start_date.strftime("%Y-%m-%dT00:00:00Z")
         end_str = end_date.strftime("%Y-%m-%dT23:59:59Z")
 
@@ -191,26 +201,32 @@ class EistArisScheduler:
         params = {"startDate": start_str, "endDate": end_str}
 
         try:
-            resp = self.session.get(url, params=params)
+            resp = self.session.get(url, params=params, timeout=REQUEST_TIMEOUT)
             resp.raise_for_status()
             data = resp.json()
             return data.get("schedules", [])
-        except requests.exceptions.RequestException as exc:
+        except (requests.exceptions.RequestException, ValueError) as exc:
             print(f"Error fetching schedule: {exc}", file=sys.stderr)
+            if raise_on_error:
+                raise
             return []
 
     def fetch_track_details(self, track_id: str) -> Optional[Dict]:
         """Fetch track metadata from the undocumented track API.
 
-        Returns the JSON response on success, None on 404 (track genuinely
-        missing).  Raises on auth errors (401/403) so callers don't
-        misinterpret an auth failure as a deleted file.
+        Returns the JSON response on success and None when the request could
+        not be completed (timeout, connection error). Raises HTTPError on any
+        error status, including 401/403, so callers don't misinterpret an
+        auth failure as a deleted file.
+
+        None does not mean the file is gone. Use track_file_status() to decide
+        whether a show's file is missing.
         """
         url = f"{API_BASE_URL}/{STATION_ID}/media/track"
         params = {"trackId": track_id}
 
         try:
-            resp = self.session.get(url, params=params)
+            resp = self.session.get(url, params=params, timeout=REQUEST_TIMEOUT)
             if resp.status_code in (401, 403):
                 raise requests.exceptions.HTTPError(
                     f"{resp.status_code} Auth error for track {track_id}",
@@ -227,12 +243,41 @@ class EistArisScheduler:
             )
             return None
 
+    def track_file_status(self, track_id: str) -> str:
+        """Report whether a track's file exists in the media library.
+
+        Returns "present" or "missing" only when the API gave a definite
+        answer. Returns "unauthorized" on 401/403 and "unknown" for any other
+        failure, so that a timeout or server error is never read as a
+        deleted file.
+        """
+        url = f"{API_BASE_URL}/{STATION_ID}/media/track"
+
+        try:
+            resp = self.session.get(
+                url, params={"trackId": track_id}, timeout=REQUEST_TIMEOUT
+            )
+            if resp.status_code in (401, 403):
+                return "unauthorized"
+            resp.raise_for_status()
+            data = resp.json()
+        except (requests.exceptions.RequestException, ValueError) as exc:
+            print(
+                f"Warning: Track lookup failed for {track_id}: {exc}",
+                file=sys.stderr,
+            )
+            return "unknown"
+
+        if isinstance(data, dict) and data.get("tracks"):
+            return "present"
+        return "missing"
+
     def fetch_artist_details(self, artist_id: str) -> Optional[Dict]:
         """Fetch artist metadata."""
         url = f"{API_BASE_URL}/{STATION_ID}/artists/{artist_id}"
 
         try:
-            resp = self.session.get(url)
+            resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.RequestException as exc:
@@ -288,7 +333,7 @@ class EistArisScheduler:
             if not self.is_eligible_show(show):
                 continue
 
-            media = show.get("media", {})
+            media = show.get("media") or {}
             track_id = media.get("trackId")
             file_duration = show.get("duration", 60)  # minutes
 
@@ -1205,7 +1250,15 @@ def mode_check_slot(
     fetch_end = slot_end_2hr + timedelta(minutes=10)
     print(f"\nFetching schedule for {fetch_start.strftime('%H:%M')}-{fetch_end.strftime('%H:%M')} UTC...")
 
-    schedule = scheduler.fetch_schedule(fetch_start, fetch_end)
+    # An API failure must not be read as an empty slot.
+    try:
+        schedule = scheduler.fetch_schedule(fetch_start, fetch_end, raise_on_error=True)
+    except (requests.exceptions.RequestException, ValueError):
+        print(
+            "\n✗ Could not fetch the schedule. Leaving the slot untouched.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Separate shows overlapping the first and second hours
     overlapping_first = []
@@ -1242,7 +1295,7 @@ def mode_check_slot(
 
         for show in overlapping_first:
             title = show.get("title", "(no title)")
-            media = show.get("media", {})
+            media = show.get("media") or {}
             media_type = media.get("type", "unknown")
             track_id = media.get("trackId")
 
@@ -1259,23 +1312,22 @@ def mode_check_slot(
                 break
             elif media_type == "mix" and track_id:
                 # Try track validation — authenticate lazily if API key alone gets 401
-                try:
-                    track_data = scheduler.fetch_track_details(track_id)
-                except requests.exceptions.HTTPError:
+                status = scheduler.track_file_status(track_id)
+                if status == "unauthorized" and not scheduler.authenticated:
                     # API key wasn't enough, try with Playwright auth
-                    if not scheduler.authenticated:
-                        scheduler.authenticate_with_playwright()
-                    if not scheduler.authenticated:
-                        print(f"    → ⚠ Cannot validate track (auth unavailable). Assuming valid.")
-                        continue
-                    track_data = scheduler.fetch_track_details(track_id)
-                if track_data and track_data.get("tracks"):
+                    scheduler.authenticate_with_playwright()
+                    if scheduler.authenticated:
+                        status = scheduler.track_file_status(track_id)
+                if status == "present":
                     print(f"    → Pre-record with valid file. No action needed.")
-                else:
+                elif status == "missing":
                     print(f"    → ⚠ Pre-record with DELETED file (trackId exists but file gone)! Needs replacement.")
                     action = "replace"
                     broken_show = show
                     break
+                else:
+                    # Only a definite answer from the API may trigger a delete.
+                    print(f"    → ⚠ Cannot validate track ({status}). Assuming valid.")
             else:
                 print(f"    → Unknown media type '{media_type}'. Skipping.")
 
@@ -1313,11 +1365,19 @@ def mode_check_slot(
     # Exclude shows already in this week's schedule to prevent duplicates
     week_start = scheduler.get_week_start(slot_start)
     week_end = week_start + timedelta(days=7)
-    week_schedule = scheduler.fetch_schedule(week_start, week_end)
+    try:
+        week_schedule = scheduler.fetch_schedule(week_start, week_end, raise_on_error=True)
+    except (requests.exceptions.RequestException, ValueError):
+        print(
+            "\n✗ Could not fetch this week's schedule for duplicate filtering. "
+            "Leaving the slot untouched.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     scheduled_track_ids = set()
     for show in week_schedule:
-        media = show.get("media", {})
+        media = show.get("media") or {}
         tid = media.get("trackId")
         if tid:
             scheduled_track_ids.add(tid)
@@ -1343,22 +1403,26 @@ def mode_check_slot(
         tid = s.get("track_id")
         if not tid:
             continue
-        track_data = scheduler.fetch_track_details(tid)
-        if track_data and track_data.get("tracks"):
+        status = scheduler.track_file_status(tid)
+        if status == "present":
             validated_1hr.append(s)
-        else:
+        elif status == "missing":
             print(f"  Skipping '{s['title']}' — track file deleted from media library")
+        else:
+            print(f"  Skipping '{s['title']}' — could not validate track ({status})")
 
     validated_2hr = []
     for s in eligible_2hr:
         tid = s.get("track_id")
         if not tid:
             continue
-        track_data = scheduler.fetch_track_details(tid)
-        if track_data and track_data.get("tracks"):
+        status = scheduler.track_file_status(tid)
+        if status == "present":
             validated_2hr.append(s)
-        else:
+        elif status == "missing":
             print(f"  Skipping '{s['title']}' — track file deleted from media library")
+        else:
+            print(f"  Skipping '{s['title']}' — could not validate track ({status})")
 
     eligible_1hr = validated_1hr
     eligible_2hr = validated_2hr
@@ -1570,6 +1634,7 @@ def mode_check_slot(
                 page.wait_for_timeout(1_000)
 
             # Step 2: Create replacement show(s)
+            created = []
             for i, m in enumerate(mappings, 1):
                 try:
                     print(f"\nCreating show {i}/{len(mappings)}...")
@@ -1577,6 +1642,7 @@ def mode_check_slot(
                     show = m["show"]
                     slot = m["slot"]
                     print(f"✓ Created '{show['title']} (éist arís)' at {slot['start']}")
+                    created.append(m)
                 except Exception as exc:
                     if "conflicts" in str(exc).lower():
                         print(f"\n⚠ Conflict with existing event (likely a recurring rule).")
@@ -1593,12 +1659,22 @@ def mode_check_slot(
                         raise
 
             print("\n" + "=" * 80)
-            print(f"✓ SUCCESS: Created {len(mappings)} show(s)")
-            for m in mappings:
-                show = m["show"]
-                slot = m["slot"]
-                print(f"  - '{show['title']} (éist arís)' at {slot['start']} ({slot['scheduled_duration']}min)")
+            if created:
+                print(f"✓ SUCCESS: Created {len(created)} show(s)")
+                for m in created:
+                    show = m["show"]
+                    slot = m["slot"]
+                    print(f"  - '{show['title']} (éist arís)' at {slot['start']} ({slot['scheduled_duration']}min)")
+            skipped = len(mappings) - len(created)
+            if skipped:
+                # Not a success: the workflow keys its Discord notice on the
+                # SUCCESS line above, so report this separately and fail the run.
+                print(f"✗ FAILED: {skipped} of {len(mappings)} show(s) not created (schedule conflict)")
+                if action == "replace":
+                    print("  The broken show was already deleted — this slot needs manual attention.")
             print("=" * 80)
+            if skipped:
+                sys.exit(1)
 
         except Exception as exc:
             print(f"\nError during check-slot execution: {exc}")
