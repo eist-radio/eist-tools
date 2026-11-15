@@ -30,6 +30,12 @@ STATION_ID = "eist-radio"
 API_BASE_URL = "https://api.radiocult.fm/api/station"
 WEB_BASE_URL = "https://app.radiocult.fm"
 
+# Broadcast hours are defined in Dublin local time, so the UTC window moves
+# by an hour when the clocks change. An end hour of 24 means midnight.
+IRISH_TZ = ZoneInfo("Europe/Dublin")
+BROADCAST_START_HOUR = 9
+BROADCAST_END_HOUR = 24
+
 
 def save_json(data, default_filename: str, output_path: Optional[str] = None) -> str:
     """Write JSON to disk, returning the path used."""
@@ -49,6 +55,26 @@ def parse_target_date(date_str: str) -> datetime:
         print(f"Error parsing date: {exc}", file=sys.stderr)
         print("Use: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS", file=sys.stderr)
         sys.exit(1)
+
+
+def to_irish(dt: datetime) -> datetime:
+    """Convert a UTC datetime (naive values are taken as UTC) to Dublin time."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(IRISH_TZ)
+
+
+def in_broadcast_hours(dt: datetime) -> bool:
+    """Return True if a slot starting at this UTC datetime is on air."""
+    return BROADCAST_START_HOUR <= to_irish(dt).hour < BROADCAST_END_HOUR
+
+
+def broadcast_bounds_utc(day: datetime) -> tuple:
+    """Return the UTC start and end of the broadcast day for a calendar date."""
+    midnight = datetime(day.year, day.month, day.day)
+    start = (midnight + timedelta(hours=BROADCAST_START_HOUR)).replace(tzinfo=IRISH_TZ)
+    end = (midnight + timedelta(hours=BROADCAST_END_HOUR)).replace(tzinfo=IRISH_TZ)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 
 def round_up_to_hour(dt: datetime) -> datetime:
@@ -309,7 +335,7 @@ class EistArisScheduler:
 
     def find_empty_slots(self, target_date: datetime, days: int = 7) -> List[Dict]:
         """
-        Find empty 1h/2h slots between 9:00 and 23:00 for target week.
+        Find empty 1h/2h slots within broadcast hours (Dublin time) for target week.
         Returns slots with datetime objects (start, end).
         """
         week_start = self.get_week_start(target_date)
@@ -343,12 +369,7 @@ class EistArisScheduler:
 
         for day_offset in range(days):
             current_day = week_start + timedelta(days=day_offset)
-            day_start = current_day.replace(
-                hour=9, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
-            )
-            day_end = current_day.replace(
-                hour=23, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
-            )
+            day_start, day_end = broadcast_bounds_utc(current_day)
 
             day_shows = [
                 s for s in occupied_slots
@@ -358,7 +379,7 @@ class EistArisScheduler:
             print(f"\n{current_day.strftime('%A %Y-%m-%d')}:")
             print(
                 f"  Day bounds: {day_start:%Y-%m-%d %H:%M} "
-                f"to {day_end:%Y-%m-%d %H:%M}"
+                f"to {day_end:%Y-%m-%d %H:%M} UTC"
             )
             print(f"  Found {len(day_shows)} shows on this day")
 
@@ -591,7 +612,7 @@ class EistArisScheduler:
         scheduled_duration = slot["scheduled_duration"]
         end_time = start_time + timedelta(minutes=scheduled_duration)
 
-        irish_tz = ZoneInfo("Europe/Dublin")
+        irish_tz = IRISH_TZ
         start_local = start_time.astimezone(irish_tz)
 
         show_title = f"{show['title']} (éist arís)"
@@ -600,7 +621,7 @@ class EistArisScheduler:
         print(f"Creating: {show_title}")
         print(f"When: {start_local.strftime('%A')}, {start_local.strftime('%Y-%m-%d')}")
         print(f"Time: {start_local.strftime('%H:%M')} - "
-              f"{end_time.astimezone(irish_tz).strftime('%H:%M')} IST "
+              f"{end_time.astimezone(irish_tz).strftime('%H:%M')} Irish time "
               f"({scheduled_duration}min)")
         print(f"  (= {start_time.strftime('%H:%M')} - "
               f"{end_time.strftime('%H:%M')} UTC)")
@@ -1168,12 +1189,16 @@ def mode_check_slot(
     print(f"\nInput time:  {target_date.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Checking:    {slot_start.strftime('%Y-%m-%d %H:%M')} - {slot_end_2hr.strftime('%H:%M')} UTC (2hr window)")
 
-    # Check broadcast window (08:00-23:00 UTC = 9am-midnight Irish)
-    if slot_start.hour < 8 or slot_start.hour >= 23:
-        print(f"\n✓ Slot at {slot_start.strftime('%H:%M')} UTC is outside broadcast hours (08:00-23:00). No action needed.")
+    # Broadcast hours are Dublin local time, so compare the Irish hour.
+    if not in_broadcast_hours(slot_start):
+        print(
+            f"\n✓ Slot at {to_irish(slot_start).strftime('%H:%M')} Irish time "
+            f"({slot_start.strftime('%H:%M')} UTC) is outside broadcast hours "
+            f"({BROADCAST_START_HOUR:02d}:00-{BROADCAST_END_HOUR:02d}:00 Irish time). No action needed."
+        )
         return
 
-    second_hour_in_broadcast = 8 <= slot_end_1hr.hour < 23
+    second_hour_in_broadcast = in_broadcast_hours(slot_end_1hr)
 
     # Fetch schedule for the full 2hr window
     fetch_start = slot_start - timedelta(minutes=10)
@@ -1690,8 +1715,7 @@ def main() -> None:
         return
 
     if args.check_slot:
-        irish_tz = ZoneInfo("Europe/Dublin")
-        local_dt = target_date.replace(tzinfo=irish_tz)
+        local_dt = target_date.replace(tzinfo=IRISH_TZ)
         utc_dt = local_dt.astimezone(timezone.utc).replace(tzinfo=None)
         mode_check_slot(
             scheduler,
