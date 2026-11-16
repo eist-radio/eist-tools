@@ -67,6 +67,9 @@ class TrackFileStatus(unittest.TestCase):
         self.scheduler.session = mock.Mock()
 
     def status_for(self, result):
+        # Each case stands for a fresh run, so drop the cached library.
+        self.scheduler._track_ids = None
+        self.scheduler._track_library_failed = False
         if isinstance(result, Exception):
             self.scheduler.session.get.side_effect = result
         else:
@@ -77,7 +80,30 @@ class TrackFileStatus(unittest.TestCase):
 
     def test_definite_answers(self):
         self.assertEqual(self.status_for(response(200, {"tracks": [{"id": "t1"}]})), "present")
-        self.assertEqual(self.status_for(response(200, {"tracks": []})), "missing")
+        self.assertEqual(self.status_for(response(200, {"tracks": [{"id": "other"}]})), "missing")
+
+    def test_empty_library_is_unknown(self):
+        self.assertEqual(self.status_for(response(200, {"tracks": []})), "unknown")
+
+    def test_library_is_fetched_once_per_run(self):
+        library = response(200, {"tracks": [{"id": "t1"}, {"id": "t2"}]})
+        self.assertEqual(self.status_for(library), "present")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(self.scheduler.track_file_status("t2"), "present")
+            self.assertEqual(self.scheduler.track_file_status("gone"), "missing")
+        self.assertEqual(self.scheduler.session.get.call_count, 1)
+
+    def test_failure_is_not_retried_for_every_show(self):
+        self.assertEqual(self.status_for(requests.exceptions.Timeout()), "unknown")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.scheduler.track_file_status("t2"), "unknown")
+        self.assertEqual(self.scheduler.session.get.call_count, 1)
+
+    def test_unauthorized_is_retried_after_login(self):
+        self.assertEqual(self.status_for(response(401)), "unauthorized")
+        self.scheduler.session.get.return_value = response(200, {"tracks": [{"id": "t1"}]})
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(self.scheduler.track_file_status("t1"), "present")
 
     def test_other_tracks_in_response_do_not_count(self):
         library = {"tracks": [{"id": "other-1"}, {"id": "other-2"}]}

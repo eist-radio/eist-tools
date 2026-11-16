@@ -109,6 +109,10 @@ class EistArisScheduler:
         )
         self.authenticated = False
 
+        # Ids of every track in the media library, loaded on first use.
+        self._track_ids: Optional[set] = None
+        self._track_library_failed = False
+
         # Matches: "éist arís", "eist aris", "ésit arís", "(éist arís)", "(eist aris)" and variations
         self.eist_aris_pattern = re.compile(
             r"\(?\s*[eé](?:ist|sit)\s+ar[ií]s\s*\)?", re.IGNORECASE
@@ -243,49 +247,60 @@ class EistArisScheduler:
             )
             return None
 
-    def track_file_status(self, track_id: str) -> str:
-        """Report whether a track's file exists in the media library.
+    def _load_track_library(self) -> str:
+        """Fetch the ids of every track in the media library, once per run.
 
-        Returns "present" only when the response contains a track with this
-        id, and "missing" when the API answered without one. Returns "unauthorized" on 401/403 and "unknown" for any other
-        failure, so that a timeout or server error is never read as a
-        deleted file.
+        Returns "ok" when the ids are available, "unauthorized" on 401/403
+        (not cached, so a later call can retry after logging in) and
+        "unknown" for any other failure. A failure is remembered for the rest
+        of the run so a dead API is not retried once per show.
         """
+        if self._track_ids is not None:
+            return "ok"
+        if self._track_library_failed:
+            return "unknown"
+
         url = f"{API_BASE_URL}/{STATION_ID}/media/track"
 
         try:
-            resp = self.session.get(
-                url, params={"trackId": track_id}, timeout=REQUEST_TIMEOUT
-            )
+            resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
             if resp.status_code in (401, 403):
                 return "unauthorized"
             resp.raise_for_status()
             data = resp.json()
         except (requests.exceptions.RequestException, ValueError) as exc:
-            print(
-                f"Warning: Track lookup failed for {track_id}: {exc}",
-                file=sys.stderr,
-            )
+            print(f"Warning: Could not load the media library: {exc}", file=sys.stderr)
+            self._track_library_failed = True
             return "unknown"
 
         tracks = data.get("tracks") if isinstance(data, dict) else None
-        if not isinstance(tracks, list):
-            print(
-                f"Warning: Unexpected track lookup response for {track_id}",
-                file=sys.stderr,
-            )
+        # An empty library would mark every scheduled file as deleted, so
+        # treat it as a bad response instead of a definite answer.
+        if not isinstance(tracks, list) or not tracks:
+            print("Warning: Unexpected media library response", file=sys.stderr)
+            self._track_library_failed = True
             return "unknown"
 
-        # The endpoint lists the media library, so a non-empty response does
-        # not prove this track exists. Only an entry with the same id does.
-        found = any(
-            isinstance(t, dict) and t.get("id") == track_id for t in tracks
-        )
-        print(
-            f"    Track lookup: {len(tracks)} track(s) returned, "
-            f"id match: {'yes' if found else 'no'}"
-        )
-        return "present" if found else "missing"
+        self._track_ids = {
+            t.get("id") for t in tracks if isinstance(t, dict) and t.get("id")
+        }
+        print(f"    Media library loaded: {len(self._track_ids)} track(s)")
+        return "ok"
+
+    def track_file_status(self, track_id: str) -> str:
+        """Report whether a track's file exists in the media library.
+
+        Returns "present" when the library contains a track with this id and
+        "missing" when it does not. Returns "unauthorized" on 401/403 and
+        "unknown" for any other failure, so that a timeout or server error is
+        never read as a deleted file.
+
+        The library is fetched once and reused for every lookup in the run.
+        """
+        state = self._load_track_library()
+        if state != "ok":
+            return state
+        return "present" if track_id in self._track_ids else "missing"
 
     def fetch_artist_details(self, artist_id: str) -> Optional[Dict]:
         """Fetch artist metadata."""
