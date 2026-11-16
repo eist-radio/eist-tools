@@ -246,8 +246,8 @@ class EistArisScheduler:
     def track_file_status(self, track_id: str) -> str:
         """Report whether a track's file exists in the media library.
 
-        Returns "present" or "missing" only when the API gave a definite
-        answer. Returns "unauthorized" on 401/403 and "unknown" for any other
+        Returns "present" only when the response contains a track with this
+        id, and "missing" when the API answered without one. Returns "unauthorized" on 401/403 and "unknown" for any other
         failure, so that a timeout or server error is never read as a
         deleted file.
         """
@@ -268,9 +268,24 @@ class EistArisScheduler:
             )
             return "unknown"
 
-        if isinstance(data, dict) and data.get("tracks"):
-            return "present"
-        return "missing"
+        tracks = data.get("tracks") if isinstance(data, dict) else None
+        if not isinstance(tracks, list):
+            print(
+                f"Warning: Unexpected track lookup response for {track_id}",
+                file=sys.stderr,
+            )
+            return "unknown"
+
+        # The endpoint lists the media library, so a non-empty response does
+        # not prove this track exists. Only an entry with the same id does.
+        found = any(
+            isinstance(t, dict) and t.get("id") == track_id for t in tracks
+        )
+        print(
+            f"    Track lookup: {len(tracks)} track(s) returned, "
+            f"id match: {'yes' if found else 'no'}"
+        )
+        return "present" if found else "missing"
 
     def fetch_artist_details(self, artist_id: str) -> Optional[Dict]:
         """Fetch artist metadata."""

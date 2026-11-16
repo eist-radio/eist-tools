@@ -72,12 +72,22 @@ class TrackFileStatus(unittest.TestCase):
         else:
             self.scheduler.session.get.side_effect = None
             self.scheduler.session.get.return_value = result
-        with contextlib.redirect_stderr(io.StringIO()):
+        with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
             return self.scheduler.track_file_status("t1")
 
     def test_definite_answers(self):
         self.assertEqual(self.status_for(response(200, {"tracks": [{"id": "t1"}]})), "present")
         self.assertEqual(self.status_for(response(200, {"tracks": []})), "missing")
+
+    def test_other_tracks_in_response_do_not_count(self):
+        library = {"tracks": [{"id": "other-1"}, {"id": "other-2"}]}
+        self.assertEqual(self.status_for(response(200, library)), "missing")
+        library["tracks"].append({"id": "t1"})
+        self.assertEqual(self.status_for(response(200, library)), "present")
+
+    def test_unexpected_response_shape_is_unknown(self):
+        self.assertEqual(self.status_for(response(200, {})), "unknown")
+        self.assertEqual(self.status_for(response(200, [])), "unknown")
 
     def test_failures_are_never_missing(self):
         self.assertEqual(self.status_for(requests.exceptions.Timeout()), "unknown")
