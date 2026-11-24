@@ -1,7 +1,7 @@
 {
-  "over_threshold": false,
-  "percent": 89.8,
-  "used_gb": 44.92,
+  "over_threshold": true,
+  "percent": 90.9,
+  "used_gb": 45.47,
   "cap_gb": 50.0,
-  "checked_at": "2026-11-24T09:52:15.155202+00:00"
+  "checked_at": "2026-11-24T22:24:58.063120+00:00"
 }
